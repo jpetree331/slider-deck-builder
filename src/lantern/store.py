@@ -1,0 +1,260 @@
+"""Lantern deck store — the ONLY module that touches the deck folder layout.
+
+Framework-free on purpose — no FastAPI imports — exercised headless by scripts/.
+A deck IS a folder: data/decks/<id>/deck.json + slides/NN.png + exports/.
+Every deck.json write is atomic: write deck.json.tmp, then os.replace
+(Sacred Invariant 2). load_deck() sanitizes defensively — corrupt or partial
+files coerce to safe defaults or raise a clean StoreError, never crash.
+"""
+import json
+import logging
+import os
+import re
+import secrets
+from datetime import datetime, timezone
+from pathlib import Path
+
+from . import config
+
+logger = logging.getLogger("lantern.store")
+
+SLIDE_SIZES = ("1K", "2K", "4K")
+DECK_STATUSES = ("outline", "rendering", "done", "error")
+RENDER_STATUSES = ("pending", "rendering", "done", "error")
+
+_HEX_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
+
+DEFAULT_PALETTE = ["#0E1420", "#F2E9DC", "#D96C3A"]
+
+
+class StoreError(Exception):
+    """Clean, catchable failure — deck missing or unreadable."""
+
+
+class DeckNotFound(StoreError):
+    pass
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def make_id(prefix: str) -> str:
+    return f"{prefix}_{secrets.token_hex(4)}"
+
+
+# Brief spells it makeId — keep both names honest.
+makeId = make_id
+
+
+def decks_root() -> Path:
+    return config.DATA_DIR / "decks"
+
+
+def deck_dir(deck_id: str) -> Path:
+    # Refuse path-traversal-shaped ids before they touch the filesystem.
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", deck_id or ""):
+        raise DeckNotFound(f"invalid deck id: {deck_id!r}")
+    return decks_root() / deck_id
+
+
+def slides_dir(deck_id: str) -> Path:
+    return deck_dir(deck_id) / "slides"
+
+
+def exports_dir(deck_id: str) -> Path:
+    return deck_dir(deck_id) / "exports"
+
+
+def slide_image_name(n: int) -> str:
+    return f"{int(n):02d}.png"
+
+
+def slide_image_path(deck_id: str, n: int) -> Path:
+    return slides_dir(deck_id) / slide_image_name(n)
+
+
+# ── sanitizers ──────────────────────────────────────────────────────────────
+
+def _safe_str(v, default: str = "") -> str:
+    return v if isinstance(v, str) else default
+
+
+def _sanitize_palette(v) -> list:
+    colors = [c for c in v if isinstance(c, str) and _HEX_RE.match(c)] if isinstance(v, list) else []
+    return colors[:5] if len(colors) >= 3 else list(DEFAULT_PALETTE)
+
+
+def _sanitize_style_guide(v) -> dict:
+    v = v if isinstance(v, dict) else {}
+    return {
+        "palette": _sanitize_palette(v.get("palette")),
+        "typography": _safe_str(v.get("typography")),
+        "motif": _safe_str(v.get("motif")),
+        "art_direction": _safe_str(v.get("art_direction")),
+        "tone": _safe_str(v.get("tone")),
+    }
+
+
+def _sanitize_render(v):
+    if not isinstance(v, dict):
+        return None
+    status = v.get("status")
+    if status not in RENDER_STATUSES:
+        logger.warning("dropping render block with bad status %r", status)
+        return None
+    return {
+        "status": status,
+        "image": _safe_str(v.get("image")) or None,
+        "prompt": _safe_str(v.get("prompt")) or None,
+        "model": _safe_str(v.get("model")) or None,
+        "ms": v.get("ms") if isinstance(v.get("ms"), (int, float)) else None,
+        "error": _safe_str(v.get("error")) or None,
+        "rendered_at": _safe_str(v.get("rendered_at")) or None,
+        "cost_estimate_usd": v.get("cost_estimate_usd")
+        if isinstance(v.get("cost_estimate_usd"), (int, float)) else None,
+    }
+
+
+def _sanitize_slide(v, n: int):
+    if not isinstance(v, dict):
+        logger.warning("dropping malformed slide at position %d (not an object)", n)
+        return None
+    title = _safe_str(v.get("title"))
+    visual = _safe_str(v.get("visual_description"))
+    if not title and not visual:
+        logger.warning("dropping malformed slide at position %d (no title, no visual)", n)
+        return None
+    points = v.get("points")
+    points = [p for p in points if isinstance(p, str)] if isinstance(points, list) else []
+    return {
+        "n": n,
+        "title": title,
+        "points": points,
+        "visual_description": visual,
+        "layout_hint": _safe_str(v.get("layout_hint")),
+        "render": _sanitize_render(v.get("render")),
+    }
+
+
+def sanitize_deck(raw, fallback_id: str = "") -> dict:
+    """Coerce a loaded deck.json into a shape the app can always trust."""
+    raw = raw if isinstance(raw, dict) else {}
+    slides = []
+    for item in raw.get("slides") if isinstance(raw.get("slides"), list) else []:
+        s = _sanitize_slide(item, len(slides) + 1)
+        if s is not None:
+            slides.append(s)
+    slide_size = raw.get("slide_size")
+    if slide_size not in SLIDE_SIZES:
+        slide_size = "2K"
+    status = raw.get("status")
+    if status not in DECK_STATUSES:
+        status = "outline"
+    now = _now()
+    return {
+        "id": _safe_str(raw.get("id")) or fallback_id or make_id("dk"),
+        "title": _safe_str(raw.get("title"), "Untitled deck"),
+        "topic": _safe_str(raw.get("topic")),
+        "source_notes": _safe_str(raw.get("source_notes")),
+        "style_guide": _sanitize_style_guide(raw.get("style_guide")),
+        "slide_size": slide_size,
+        "aspect_ratio": "16:9",
+        "status": status,
+        "slides": slides,
+        "created_at": _safe_str(raw.get("created_at"), now),
+        "updated_at": _safe_str(raw.get("updated_at"), now),
+    }
+
+
+# ── CRUD ────────────────────────────────────────────────────────────────────
+
+def create_deck(*, title: str, topic: str, source_notes: str = "",
+                style_guide: dict | None = None, slides: list | None = None,
+                slide_size: str = "2K") -> dict:
+    deck_id = make_id("dk")
+    now = _now()
+    deck = sanitize_deck({
+        "id": deck_id,
+        "title": title,
+        "topic": topic,
+        "source_notes": source_notes,
+        "style_guide": style_guide or {},
+        "slide_size": slide_size,
+        "aspect_ratio": "16:9",
+        "status": "outline",
+        "slides": slides or [],
+        "created_at": now,
+        "updated_at": now,
+    }, fallback_id=deck_id)
+    # sanitize_deck fills palette defaults but must not eat verbatim user words
+    deck["topic"] = topic
+    deck["source_notes"] = source_notes
+    d = deck_dir(deck_id)
+    (d / "slides").mkdir(parents=True, exist_ok=True)
+    (d / "exports").mkdir(parents=True, exist_ok=True)
+    save_deck(deck)
+    logger.info("created deck %s (%r, %d slides)", deck_id, title, len(deck["slides"]))
+    return deck
+
+
+def load_deck(deck_id: str) -> dict:
+    path = deck_dir(deck_id) / "deck.json"
+    if not path.exists():
+        raise DeckNotFound(f"deck {deck_id} not found")
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError, UnicodeDecodeError) as e:
+        logger.warning("deck %s has unreadable deck.json: %s", deck_id, e)
+        raise StoreError(f"deck {deck_id} is unreadable: {e}") from e
+    return sanitize_deck(raw, fallback_id=deck_id)
+
+
+def save_deck(deck: dict) -> dict:
+    deck["updated_at"] = _now()
+    d = deck_dir(deck["id"])
+    d.mkdir(parents=True, exist_ok=True)
+    tmp = d / "deck.json.tmp"
+    tmp.write_text(json.dumps(deck, ensure_ascii=False, indent=2), encoding="utf-8")
+    os.replace(tmp, d / "deck.json")
+    return deck
+
+
+def list_decks() -> list:
+    root = decks_root()
+    if not root.exists():
+        return []
+    out = []
+    for entry in root.iterdir():
+        if not entry.is_dir():
+            continue
+        try:
+            deck = load_deck(entry.name)
+        except StoreError:
+            logger.warning("skipping unreadable deck folder %s in listing", entry.name)
+            continue
+        cover = slide_image_path(deck["id"], 1)
+        out.append({
+            "id": deck["id"],
+            "title": deck["title"],
+            "status": deck["status"],
+            "slide_count": len(deck["slides"]),
+            "updated_at": deck["updated_at"],
+            "cover": f"slides/{slide_image_name(1)}" if cover.exists() else None,
+        })
+    out.sort(key=lambda d: d["updated_at"], reverse=True)
+    return out
+
+
+def delete_deck(deck_id: str) -> None:
+    d = deck_dir(deck_id)
+    if not d.exists():
+        raise DeckNotFound(f"deck {deck_id} not found")
+    # bottom-up removal, no shutil surprises with read-only bits on Windows
+    for path in sorted(d.rglob("*"), key=lambda p: len(p.parts), reverse=True):
+        if path.is_file():
+            path.unlink()
+        else:
+            path.rmdir()
+    d.rmdir()
+    logger.info("deleted deck %s", deck_id)

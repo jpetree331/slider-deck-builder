@@ -1,0 +1,56 @@
+/* Lantern design tokens — the ONLY place raw colors/sizes live.
+   Components use var(--token) exclusively; no raw hex in components.
+   Direction: warm and bookish, a dark gallery wall so the slide images
+   are the brightest thing on screen. */
+
+:root {
+  /* type */
+  --font-display: 'Playfair Display', Georgia, 'Times New Roman', serif;
+  --font-ui: 'Libre Franklin', 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', Consolas, monospace;
+
+  /* canvas — warm near-blacks, gallery wall */
+  --canvas: #14110e;
+  --canvas-raised: #1d1915;
+  --canvas-overlay: #272119;
+  --stage: #000000; /* true black behind slides in present mode */
+
+  /* ink — warm paper */
+  --ink: #ece4d8;
+  --ink-dim: #a89c8c;
+  --ink-faint: #6e6355;
+
+  /* lantern ember accent */
+  --accent: #d96c3a;
+  --accent-bright: #eb8a58;
+  --accent-soft: rgba(217, 108, 58, 0.16);
+
+  /* status */
+  --ok: #86a97f;
+  --err: #c96a5e;
+  --warn: #d0a34f;
+
+  /* lines & shadows */
+  --line: rgba(236, 228, 216, 0.12);
+  --line-strong: rgba(236, 228, 216, 0.24);
+  --shadow-card: 0 2px 6px rgba(0, 0, 0, 0.35), 0 12px 32px rgba(0, 0, 0, 0.25);
+  --shadow-pop: 0 4px 12px rgba(0, 0, 0, 0.5), 0 24px 64px rgba(0, 0, 0, 0.4);
+
+  /* spacing scale */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+
+  /* radii */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+
+  /* motion */
+  --ease: cubic-bezier(0.25, 0.7, 0.3, 1);
+}
