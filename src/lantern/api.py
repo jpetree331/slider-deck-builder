@@ -17,7 +17,7 @@ from pydantic import BaseModel, field_validator
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.staticfiles import StaticFiles
 
-from . import config, outline, queue, render_service, store
+from . import config, export, outline, queue, render_service, store
 from .outline_schema import validate_palette
 
 # ── logging idiom ───────────────────────────────────────────────────────────
@@ -210,6 +210,39 @@ def cancel_render(deck_id: str):
 def duplicate_deck(deck_id: str):
     _load_or_404(deck_id)
     return store.duplicate_deck(deck_id)
+
+
+# ── Sprint 6: export ────────────────────────────────────────────────────────
+
+_EXPORT_TYPES = {"pptx": ("application/vnd.openxmlformats-officedocument"
+                          ".presentationml.presentation"),
+                 "pdf": "application/pdf",
+                 "zip": "application/zip"}
+
+
+@api_router.post("/decks/{deck_id}/export")
+def export_deck(deck_id: str, fmt: Literal["pptx", "pdf", "zip"],
+                allow_partial: bool = False):
+    _load_or_404(deck_id)
+    try:
+        path = export.export_deck(deck_id, fmt, allow_partial=allow_partial)
+    except (export.NotFullyRendered, export.NothingToExport) as e:
+        raise HTTPException(409, str(e))
+    return {"download_url": f"/api/decks/{deck_id}/exports/{path.name}"}
+
+
+@api_router.get("/decks/{deck_id}/exports/{filename}")
+def download_export(deck_id: str, filename: str):
+    _load_or_404(deck_id)
+    path = store.exports_dir(deck_id) / filename
+    # exports_dir is flat — refuse anything path-shaped
+    if "/" in filename or "\\" in filename or ".." in filename or not path.exists():
+        raise HTTPException(404, f"no export named {filename}")
+    ext = filename.rpartition(".")[2]
+    return Response(path.read_bytes(),
+                    media_type=_EXPORT_TYPES.get(ext, "application/octet-stream"),
+                    headers={"Content-Disposition":
+                             f'attachment; filename="{filename}"'})
 
 
 @api_router.get("/decks/{deck_id}/slides/{n}.png")

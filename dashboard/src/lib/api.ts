@@ -96,6 +96,17 @@ export function duplicateDeck(id: string): Promise<Deck> {
   return request(`/api/decks/${id}/duplicate`, { method: 'POST' })
 }
 
+export type ExportFormat = 'pptx' | 'pdf' | 'zip'
+
+export function exportDeck(
+  id: string,
+  fmt: ExportFormat,
+  allowPartial = false,
+): Promise<{ download_url: string }> {
+  const partial = allowPartial ? '&allow_partial=true' : ''
+  return request(`/api/decks/${id}/export?fmt=${fmt}${partial}`, { method: 'POST' })
+}
+
 /** Image URL for a rendered slide; rendered_at busts the cache on repaint. */
 export function slideImageUrl(id: string, n: number, renderedAt: string | null): string {
   const v = renderedAt ? `?v=${encodeURIComponent(renderedAt)}` : ''

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { cancelRender, getDeck, patchDeck, renderDeck, renderSlide, slideImageUrl } from '../lib/api'
-import type { SlidePatchPayload } from '../lib/api'
+import { cancelRender, exportDeck, getDeck, patchDeck, renderDeck, renderSlide, slideImageUrl } from '../lib/api'
+import type { ExportFormat, SlidePatchPayload } from '../lib/api'
 import { COST_PER_IMAGE_USD, formatUsd } from '../lib/cost'
 import type { Deck, Slide } from '../lib/types'
 import './DeckPage.css'
@@ -19,6 +19,8 @@ export default function DeckPage() {
   const [actionError, setActionError] = useState<string | null>(null)
   const [editing, setEditing] = useState<number | null>(null) // slide n being edited
   const [mode, setMode] = useState<'grid' | 'present'>('grid')
+  const [exportOpen, setExportOpen] = useState(false)
+  const [exporting, setExporting] = useState<ExportFormat | null>(null)
 
   useEffect(() => {
     if (!id) return
@@ -85,6 +87,40 @@ export default function DeckPage() {
             <button onClick={() => setMode('present')} title="← → to navigate, F for fullscreen, Esc to come back">
               Present
             </button>
+          )}
+          {anyDone && (
+            <span className="export-menu">
+              <button onClick={() => setExportOpen((v) => !v)}>
+                {exporting ? `Exporting ${exporting}…` : 'Export ▾'}
+              </button>
+              {exportOpen && !exporting && (
+                <span className="export-pop">
+                  {(['pptx', 'pdf', 'zip'] as ExportFormat[]).map((fmt) => (
+                    <button
+                      key={fmt}
+                      className="ghost"
+                      onClick={async () => {
+                        if (!id) return
+                        setExporting(fmt)
+                        setActionError(null)
+                        try {
+                          const { download_url } = await exportDeck(id, fmt, notDone > 0)
+                          window.location.assign(download_url)
+                        } catch (e) {
+                          setActionError(e instanceof Error ? e.message : String(e))
+                        } finally {
+                          setExporting(null)
+                          setExportOpen(false)
+                        }
+                      }}
+                    >
+                      {fmt.toUpperCase()}
+                      {notDone > 0 && ' (painted only)'}
+                    </button>
+                  ))}
+                </span>
+              )}
+            </span>
           )}
           <Link to={`/decks/${deck.id}/outline`}>
             <button className="ghost">Edit outline</button>
