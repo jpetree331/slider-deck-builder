@@ -21,6 +21,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     try {
       const body = await res.json()
       if (typeof body?.detail === 'string') detail = body.detail
+      else if (Array.isArray(body?.detail))
+        // FastAPI 422s carry a list of validation errors — surface the messages
+        detail = body.detail
+          .map((d: { msg?: string }) => d?.msg ?? JSON.stringify(d))
+          .join('; ')
     } catch {
       /* non-JSON error body — keep statusText */
     }

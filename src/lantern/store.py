@@ -12,6 +12,7 @@ import os
 import re
 import secrets
 import threading
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -173,6 +174,21 @@ def sanitize_deck(raw, fallback_id: str = "") -> dict:
 LOCK = threading.RLock()
 
 
+def atomic_replace(src: Path, dst: Path, attempts: int = 6) -> None:
+    """os.replace with a short retry ladder. On Windows, a concurrent reader
+    holding the destination open (a 2s status poll, a thumbnail fetch, an
+    antivirus scan) fails the swap with PermissionError; the window is
+    milliseconds, so a bounded backoff absorbs it."""
+    for attempt in range(attempts):
+        try:
+            os.replace(src, dst)
+            return
+        except PermissionError:
+            if attempt == attempts - 1:
+                raise
+            time.sleep(0.02 * (attempt + 1))
+
+
 def update_deck(deck_id: str, mutate):
     """Load → mutate(deck) → atomic save, under LOCK. Returns the saved deck.
     mutate may return a replacement dict or edit in place and return None."""
@@ -237,10 +253,10 @@ def patch_slides(deck_id: str, patches: list) -> dict:
             src = sdir / slide_image_name(old_n)
             if src.exists():
                 tmp = sdir / f"move-{new_n:02d}.tmp"
-                os.replace(src, tmp)
+                atomic_replace(src, tmp)
                 staged.append((tmp, sdir / slide_image_name(new_n)))
         for tmp, dst in staged:
-            os.replace(tmp, dst)
+            atomic_replace(tmp, dst)
         # remove PNGs no slide claims any more (deleted or content-edited slides)
         claimed = {s["render"]["image"].rpartition("/")[2]
                    for s in deck["slides"]
@@ -286,23 +302,28 @@ def create_deck(*, title: str, topic: str, source_notes: str = "",
 
 def load_deck(deck_id: str) -> dict:
     path = deck_dir(deck_id) / "deck.json"
-    if not path.exists():
-        raise DeckNotFound(f"deck {deck_id} not found")
-    try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError, UnicodeDecodeError) as e:
-        logger.warning("deck %s has unreadable deck.json: %s", deck_id, e)
-        raise StoreError(f"deck {deck_id} is unreadable: {e}") from e
+    # under LOCK so an in-process reader can never hold the file open across
+    # a concurrent save's replace (Windows denies the swap in that window)
+    with LOCK:
+        if not path.exists():
+            raise DeckNotFound(f"deck {deck_id} not found")
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError, UnicodeDecodeError) as e:
+            logger.warning("deck %s has unreadable deck.json: %s", deck_id, e)
+            raise StoreError(f"deck {deck_id} is unreadable: {e}") from e
     return sanitize_deck(raw, fallback_id=deck_id)
 
 
 def save_deck(deck: dict) -> dict:
     deck["updated_at"] = _now()
-    d = deck_dir(deck["id"])
-    d.mkdir(parents=True, exist_ok=True)
-    tmp = d / "deck.json.tmp"
-    tmp.write_text(json.dumps(deck, ensure_ascii=False, indent=2), encoding="utf-8")
-    os.replace(tmp, d / "deck.json")
+    with LOCK:
+        d = deck_dir(deck["id"])
+        d.mkdir(parents=True, exist_ok=True)
+        tmp = d / "deck.json.tmp"
+        tmp.write_text(json.dumps(deck, ensure_ascii=False, indent=2),
+                       encoding="utf-8")
+        atomic_replace(tmp, d / "deck.json")
     return deck
 
 

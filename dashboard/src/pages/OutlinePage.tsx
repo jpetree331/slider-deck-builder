@@ -54,6 +54,13 @@ export default function OutlinePage() {
 
   const save = useCallback(() => {
     if (!id || !style) return
+    // painted-text fields can't be empty (the server 422s them anyway) —
+    // hold the save until the user finishes; the Render button stays disabled
+    if (
+      !style.art_direction.trim() ||
+      slides.some((s) => !s.title.trim() || !s.visual_description.trim())
+    )
+      return
     setSaveState('saving')
     const payload: SlidePatchPayload[] = slides.map((s) => ({
       n: s.origN,
@@ -96,6 +103,10 @@ export default function OutlinePage() {
   }, [title, style, slides, size, isLoaded])
 
   const cost = useMemo(() => estimateDeckCost(slides.length, size), [slides.length, size])
+  const incomplete =
+    !!style &&
+    (!style.art_direction.trim() ||
+      slides.some((s) => !s.title.trim() || !s.visual_description.trim()))
 
   if (error && !isLoaded) return <div className="state-note error">{error}</div>
   if (!isLoaded || !style) return <div className="state-note">Fetching the outline…</div>
@@ -122,7 +133,15 @@ export default function OutlinePage() {
           aria-label="Deck title"
         />
         <div className="outline-head-right">
-          <span className="mono save-state">{saveState === 'saved' ? 'saved' : saveState === 'saving' ? 'saving…' : 'editing…'}</span>
+          <span className="mono save-state">
+            {incomplete && saveState !== 'saved'
+              ? 'every slide needs a headline & picture'
+              : saveState === 'saved'
+                ? 'saved'
+                : saveState === 'saving'
+                  ? 'saving…'
+                  : 'editing…'}
+          </span>
           <button
             className="primary"
             disabled={saveState !== 'saved'}

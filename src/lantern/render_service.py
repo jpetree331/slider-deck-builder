@@ -3,7 +3,6 @@ pixels via gemini, validation via Pillow, atomic PNG write.
 """
 import io
 import logging
-import os
 import time
 from datetime import datetime, timezone
 
@@ -82,7 +81,7 @@ def render_slide(deck_id: str, n: int) -> dict:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".png.tmp")
     tmp.write_bytes(png)
-    os.replace(tmp, path)
+    store.atomic_replace(tmp, path)  # retry-hardened for Windows readers
 
     # 4. record the full render block
     est = gemini.COST_PER_IMAGE_USD[size]

@@ -14,11 +14,12 @@ from typing import Literal
 from fastapi import APIRouter, FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, field_validator
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.staticfiles import StaticFiles
 
 from . import config, export, outline, queue, render_service, store
-from .outline_schema import validate_palette
+from .outline_schema import MAX_POINT_WORDS, MAX_POINTS, validate_palette
 
 # ── logging idiom ───────────────────────────────────────────────────────────
 logging.basicConfig(level=logging.INFO,
@@ -41,12 +42,6 @@ async def _lifespan(_app: FastAPI):
 
 
 app = FastAPI(title="Lantern", docs_url=None, redoc_url=None, lifespan=_lifespan)
-
-# CORS locked to the Vite dev origin; production is same-origin via StaticFiles.
-app.add_middleware(CORSMiddleware,
-                   allow_origins=[config.VITE_DEV_ORIGIN],
-                   allow_methods=["*"], allow_headers=["*"],
-                   allow_credentials=True)
 
 api_router = APIRouter()
 
@@ -103,6 +98,26 @@ class SlidePatch(BaseModel):
     visual_description: str = ""
     layout_hint: str = ""
 
+    # mirror outline_schema's painted-text limits — edits must not be able to
+    # degrade what the outline validators enforced (invariant 6's other half)
+    @field_validator("title", "visual_description")
+    @classmethod
+    def painted_text_required(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("must be non-empty — this text drives the painting")
+        return v
+
+    @field_validator("points")
+    @classmethod
+    def points_are_short(cls, v: list[str]) -> list[str]:
+        if len(v) > MAX_POINTS:
+            raise ValueError(f"at most {MAX_POINTS} points per slide — they get painted")
+        for p in v:
+            if len(p.split()) > MAX_POINT_WORDS:
+                raise ValueError(f"point {p!r} is over {MAX_POINT_WORDS} words — "
+                                 "long text breaks slides")
+        return v
+
 
 class StyleGuidePatch(BaseModel):
     palette: list[str] | None = None
@@ -118,6 +133,14 @@ class StyleGuidePatch(BaseModel):
             validate_palette(v)
             if not 3 <= len(v) <= 5:
                 raise ValueError("palette must be 3-5 colors")
+        return v
+
+    @field_validator("art_direction")
+    @classmethod
+    def art_direction_nonempty(cls, v):
+        if v is not None and not v.strip():
+            raise ValueError("art_direction is the deck's whole visual identity "
+                             "— it can't be emptied")
         return v
 
 
@@ -288,10 +311,42 @@ class DashboardAuthMiddleware(BaseHTTPMiddleware):
 
 app.add_middleware(DashboardAuthMiddleware)
 
+# CORS locked to the Vite dev origin; production is same-origin via StaticFiles.
+# Registered AFTER the auth middleware on purpose: add_middleware prepends, so
+# CORS ends up OUTERMOST and browser preflights (which carry no credentials)
+# get their headers instead of a blank 401 when LANTERN_PASSWORD is set.
+app.add_middleware(CORSMiddleware,
+                   allow_origins=[config.VITE_DEV_ORIGIN],
+                   allow_methods=["*"], allow_headers=["*"],
+                   allow_credentials=True)
+
 # ── static frontend, mounted LAST so /api routes win ────────────────────────
+class SpaStaticFiles(StaticFiles):
+    """Serve the built app; unknown non-API paths fall back to index.html so
+    deep links (/new, /decks/xyz) survive hard refreshes and shared URLs."""
+
+    async def get_response(self, path: str, scope):
+        # real files (hashed bundles) and unmatched /api/* paths must 404
+        # honestly, not serve HTML — a typo'd endpoint should surface as a
+        # clean ApiError, never a JSON-parse failure on index.html
+        # (path arrives os-normalized — backslashes on Windows)
+        norm = path.replace("\\", "/")
+        fallback = not (norm.startswith("assets/") or norm.startswith("api/")
+                        or norm == "api")
+        try:
+            response = await super().get_response(path, scope)
+        except StarletteHTTPException as e:
+            if e.status_code == 404 and fallback:
+                return await super().get_response("index.html", scope)
+            raise
+        if response.status_code == 404 and fallback:
+            return await super().get_response("index.html", scope)
+        return response
+
+
 _dist = config.REPO_ROOT / "dashboard" / "dist"
 if _dist.exists():
-    app.mount("/", StaticFiles(directory=_dist, html=True), name="dashboard")
+    app.mount("/", SpaStaticFiles(directory=_dist, html=True), name="dashboard")
 else:
     logger.info("dashboard/dist not found — dev mode, use the Vite server on 5179")
 

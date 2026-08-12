@@ -11,6 +11,8 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # cp1252 consoles
 
 _tmp = tempfile.mkdtemp(prefix="lantern-verify-")
 os.environ["LANTERN_DATA_DIR"] = _tmp  # must precede the config import

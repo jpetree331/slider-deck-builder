@@ -9,6 +9,8 @@ import httpx
 
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # cp1252 consoles
 from src.lantern import store  # noqa: E402
 
 BASE = "http://localhost:8020/api"
