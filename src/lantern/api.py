@@ -17,7 +17,7 @@ from pydantic import BaseModel, field_validator
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.staticfiles import StaticFiles
 
-from . import config, gemini, outline, render_service, store
+from . import config, outline, queue, render_service, store
 from .outline_schema import validate_palette
 
 # ── logging idiom ───────────────────────────────────────────────────────────
@@ -175,19 +175,33 @@ def patch_deck(deck_id: str, req: PatchDeckRequest):
     return deck
 
 
-# ── Sprint 3: slide renderer ────────────────────────────────────────────────
+# ── Sprint 3/4: render pipeline ─────────────────────────────────────────────
 
 @api_router.post("/decks/{deck_id}/slides/{n}/render")
 def render_slide(deck_id: str, n: int):
+    """Single-slide (re)render — routed through the queue since Sprint 4."""
     _load_or_404(deck_id)
     try:
-        return render_service.render_slide(deck_id, n)
-    except render_service.AlreadyRendering as e:
+        return queue.enqueue_slide(deck_id, n)
+    except queue.DeckBusy as e:
         raise HTTPException(409, str(e))
     except render_service.SlideNotFound as e:
         raise HTTPException(404, str(e))
-    except gemini.RenderError as e:
-        raise HTTPException(503, str(e))
+
+
+@api_router.post("/decks/{deck_id}/render")
+def render_deck(deck_id: str):
+    _load_or_404(deck_id)
+    try:
+        return queue.enqueue_deck(deck_id)
+    except queue.DeckBusy as e:
+        raise HTTPException(409, str(e))
+
+
+@api_router.post("/decks/{deck_id}/cancel")
+def cancel_render(deck_id: str):
+    _load_or_404(deck_id)
+    return queue.cancel(deck_id)
 
 
 @api_router.get("/decks/{deck_id}/slides/{n}.png")

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { getDeck, patchDeck } from '../lib/api'
+import { getDeck, patchDeck, renderDeck } from '../lib/api'
 import type { SlidePatchPayload } from '../lib/api'
 import { estimateDeckCost, formatUsd } from '../lib/cost'
 import type { SlideSize, StyleGuide } from '../lib/types'
@@ -123,8 +123,19 @@ export default function OutlinePage() {
         />
         <div className="outline-head-right">
           <span className="mono save-state">{saveState === 'saved' ? 'saved' : saveState === 'saving' ? 'saving…' : 'editing…'}</span>
-          <button className="primary" disabled title="The render pipeline arrives in Sprint 4">
-            Render deck · ~{formatUsd(cost)} (Sprint 4)
+          <button
+            className="primary"
+            disabled={saveState !== 'saved'}
+            title={saveState !== 'saved' ? 'Waiting for autosave…' : 'Paints every slide, in order'}
+            onClick={() => {
+              if (!id) return
+              renderDeck(id).then(
+                () => navigate(`/decks/${id}`),
+                (e) => setError(e instanceof Error ? e.message : String(e)),
+              )
+            }}
+          >
+            Render {slides.length} slides · ~{formatUsd(cost)}
           </button>
         </div>
       </div>

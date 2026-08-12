@@ -79,3 +79,21 @@ export function patchDeck(id: string, payload: PatchDeckPayload): Promise<Deck> 
     body: JSON.stringify(payload),
   })
 }
+
+export function renderDeck(id: string): Promise<Deck> {
+  return request(`/api/decks/${id}/render`, { method: 'POST' })
+}
+
+export function cancelRender(id: string): Promise<Deck> {
+  return request(`/api/decks/${id}/cancel`, { method: 'POST' })
+}
+
+export function renderSlide(id: string, n: number): Promise<Deck> {
+  return request(`/api/decks/${id}/slides/${n}/render`, { method: 'POST' })
+}
+
+/** Image URL for a rendered slide; rendered_at busts the cache on repaint. */
+export function slideImageUrl(id: string, n: number, renderedAt: string | null): string {
+  const v = renderedAt ? `?v=${encodeURIComponent(renderedAt)}` : ''
+  return `/api/decks/${id}/slides/${n}.png${v}`
+}
