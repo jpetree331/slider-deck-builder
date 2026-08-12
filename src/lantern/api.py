@@ -204,6 +204,14 @@ def cancel_render(deck_id: str):
     return queue.cancel(deck_id)
 
 
+# ── Sprint 5: library ───────────────────────────────────────────────────────
+
+@api_router.post("/decks/{deck_id}/duplicate")
+def duplicate_deck(deck_id: str):
+    _load_or_404(deck_id)
+    return store.duplicate_deck(deck_id)
+
+
 @api_router.get("/decks/{deck_id}/slides/{n}.png")
 def slide_image(deck_id: str, n: int, request: Request):
     deck = _load_or_404(deck_id)

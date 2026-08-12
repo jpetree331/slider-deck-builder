@@ -332,6 +332,34 @@ def list_decks() -> list:
     return out
 
 
+def duplicate_deck(deck_id: str) -> dict:
+    """Deep copy under a fresh id: deck.json + slide PNGs. exports/ stays
+    empty — exports are derived artifacts, rebuilt on demand (invariant 7)."""
+    with LOCK:
+        deck = load_deck(deck_id)
+        new_id = make_id("dk")
+        dst = deck_dir(new_id)
+        (dst / "slides").mkdir(parents=True, exist_ok=True)
+        (dst / "exports").mkdir(parents=True, exist_ok=True)
+        src_slides = slides_dir(deck_id)
+        if src_slides.exists():
+            for png in src_slides.glob("*.png"):
+                (dst / "slides" / png.name).write_bytes(png.read_bytes())
+        deck["id"] = new_id
+        deck["title"] = f"{deck['title']} (copy)"
+        now = _now()
+        deck["created_at"] = now
+        if deck["status"] == "rendering":  # copying mid-render: settle the copy
+            deck["status"] = "outline"
+            for slide in deck["slides"]:
+                if slide["render"] and slide["render"]["status"] in ("pending",
+                                                                    "rendering"):
+                    slide["render"] = None
+        save_deck(deck)
+    logger.info("duplicated deck %s -> %s", deck_id, new_id)
+    return deck
+
+
 def sweep_interrupted() -> int:
     """Boot-time sweep: any slide stuck in 'rendering' flips to
     error: 'interrupted'; a deck stuck in 'rendering' flips to 'error'.

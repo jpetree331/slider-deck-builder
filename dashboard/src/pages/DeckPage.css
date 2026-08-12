@@ -188,3 +188,117 @@
   color: var(--ink-faint);
   text-align: center;
 }
+
+/* present mode — the picture IS the interface */
+.presenter {
+  position: fixed;
+  inset: 0;
+  background: var(--stage);
+  z-index: 10;
+}
+
+.presenter-stage {
+  position: absolute;
+  inset: 0 0 72px 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.presenter-stage img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain; /* 16:9 letterboxes cleanly on any screen */
+}
+
+.presenter-unpainted {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  color: var(--ink-faint);
+}
+
+.presenter-unpainted strong {
+  font-family: var(--font-display);
+  font-size: 28px;
+  color: var(--ink-dim);
+}
+
+.presenter-zone {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 30%;
+}
+
+.presenter-zone-left {
+  left: 0;
+  cursor: w-resize;
+}
+
+.presenter-zone-right {
+  right: 0;
+  cursor: e-resize;
+}
+
+.presenter-exit {
+  position: absolute;
+  top: var(--space-4);
+  left: var(--space-4);
+  color: var(--ink-faint);
+  z-index: 11;
+}
+
+.presenter-exit:hover {
+  color: var(--ink);
+}
+
+.presenter-counter {
+  position: absolute;
+  top: var(--space-4);
+  right: var(--space-4);
+  color: var(--ink-faint);
+  z-index: 11;
+}
+
+.presenter-filmstrip {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  overflow-x: auto;
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.presenter-thumb {
+  padding: 0;
+  height: 48px;
+  aspect-ratio: 16 / 9;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  overflow: hidden;
+  background: var(--canvas-overlay);
+  opacity: 0.55;
+  flex: none;
+  transition: opacity 0.15s var(--ease), border-color 0.15s var(--ease);
+}
+
+.presenter-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.presenter-thumb.current,
+.presenter-thumb:hover {
+  opacity: 1;
+  border-color: var(--accent);
+}

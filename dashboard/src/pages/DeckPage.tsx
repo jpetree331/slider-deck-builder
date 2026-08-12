@@ -18,12 +18,18 @@ export default function DeckPage() {
   const [error, setError] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [editing, setEditing] = useState<number | null>(null) // slide n being edited
+  const [mode, setMode] = useState<'grid' | 'present'>('grid')
 
   useEffect(() => {
     if (!id) return
     let alive = true
     getDeck(id).then(
-      (d) => alive && setDeck(d),
+      (d) => {
+        if (!alive) return
+        setDeck(d)
+        // a finished deck opens straight into the viewer — the picture IS the interface
+        if (d.status === 'done') setMode('present')
+      },
       (e) => alive && setError(e instanceof Error ? e.message : String(e)),
     )
     return () => {
@@ -61,6 +67,10 @@ export default function DeckPage() {
   if (!deck) return <div className="state-note">Opening the deck…</div>
 
   const estimate = notDone * COST_PER_IMAGE_USD[deck.slide_size]
+  const anyDone = deck.slides.some((s) => s.render?.status === 'done')
+
+  if (mode === 'present')
+    return <Presenter deck={deck} onExit={() => setMode('grid')} />
 
   return (
     <div className="deckpage">
@@ -71,6 +81,11 @@ export default function DeckPage() {
         <h1>{deck.title}</h1>
         <div className="deckpage-bar-right">
           <span className={`mono status-chip status-${deck.status}`}>{deck.status}</span>
+          {anyDone && (
+            <button onClick={() => setMode('present')} title="← → to navigate, F for fullscreen, Esc to come back">
+              Present
+            </button>
+          )}
           <Link to={`/decks/${deck.id}/outline`}>
             <button className="ghost">Edit outline</button>
           </Link>
@@ -164,6 +179,87 @@ export default function DeckPage() {
       <footer className="deckpage-foot mono">
         {deck.slides.length} slides · {deck.slide_size} · spent so far ~{formatUsd(spentSoFar)}
       </footer>
+    </div>
+  )
+}
+
+function Presenter({ deck, onExit }: { deck: Deck; onExit: () => void }) {
+  const [i, setI] = useState(0)
+  const slides = deck.slides
+  const slide = slides[i]
+
+  const step = useCallback(
+    (delta: number) =>
+      setI((v) => Math.max(0, Math.min(slides.length - 1, v + delta))),
+    [slides.length],
+  )
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowRight' || e.key === ' ') step(1)
+      else if (e.key === 'ArrowLeft') step(-1)
+      else if (e.key === 'f' || e.key === 'F') {
+        if (document.fullscreenElement) void document.exitFullscreen()
+        else void document.documentElement.requestFullscreen()
+      } else if (e.key === 'Escape') {
+        // in fullscreen the browser consumes Esc to exit fullscreen first
+        if (!document.fullscreenElement) onExit()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [step, onExit])
+
+  // preload the neighbors so ←/→ never flashes
+  useEffect(() => {
+    for (const j of [i - 1, i + 1]) {
+      const s = slides[j]
+      if (s?.render?.status === 'done') {
+        const img = new Image()
+        img.src = slideImageUrl(deck.id, s.n, s.render.rendered_at)
+      }
+    }
+  }, [i, slides, deck.id])
+
+  return (
+    <div className="presenter">
+      <div className="presenter-stage">
+        {slide.render?.status === 'done' && slide.render.image ? (
+          <img
+            src={slideImageUrl(deck.id, slide.n, slide.render.rendered_at)}
+            alt={slide.title}
+          />
+        ) : (
+          <div className="presenter-unpainted">
+            <span className="mono">unpainted</span>
+            <strong>{slide.title}</strong>
+          </div>
+        )}
+        <div className="presenter-zone presenter-zone-left" onClick={() => step(-1)} />
+        <div className="presenter-zone presenter-zone-right" onClick={() => step(1)} />
+      </div>
+      <button className="ghost presenter-exit mono" onClick={onExit} title="Esc">
+        ✕ grid
+      </button>
+      <span className="mono presenter-counter">
+        {String(i + 1).padStart(2, '0')} / {String(slides.length).padStart(2, '0')}
+      </span>
+      <div className="presenter-filmstrip">
+        {slides.map((s, j) => (
+          <button
+            key={s.n}
+            className={`presenter-thumb${j === i ? ' current' : ''}`}
+            onClick={() => setI(j)}
+            title={s.title}
+          >
+            {s.render?.status === 'done' && s.render.image ? (
+              <img src={slideImageUrl(deck.id, s.n, s.render.rendered_at)} alt="" loading="lazy" />
+            ) : (
+              <span className="mono">{s.n}</span>
+            )}
+          </button>
+        ))}
+      </div>
     </div>
   )
 }

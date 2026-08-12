@@ -92,6 +92,10 @@ export function renderSlide(id: string, n: number): Promise<Deck> {
   return request(`/api/decks/${id}/slides/${n}/render`, { method: 'POST' })
 }
 
+export function duplicateDeck(id: string): Promise<Deck> {
+  return request(`/api/decks/${id}/duplicate`, { method: 'POST' })
+}
+
 /** Image URL for a rendered slide; rendered_at busts the cache on repaint. */
 export function slideImageUrl(id: string, n: number, renderedAt: string | null): string {
   const v = renderedAt ? `?v=${encodeURIComponent(renderedAt)}` : ''
