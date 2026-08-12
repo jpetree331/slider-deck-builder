@@ -332,6 +332,39 @@ def list_decks() -> list:
     return out
 
 
+def sweep_interrupted() -> int:
+    """Boot-time sweep: any slide stuck in 'rendering' flips to
+    error: 'interrupted'; a deck stuck in 'rendering' flips to 'error'.
+    Restarts never leave zombie state. Returns the number of decks touched."""
+    touched = 0
+    root = decks_root()
+    if not root.exists():
+        return 0
+    with LOCK:
+        for entry in root.iterdir():
+            if not entry.is_dir():
+                continue
+            try:
+                deck = load_deck(entry.name)
+            except StoreError:
+                continue
+            dirty = False
+            for slide in deck["slides"]:
+                render = slide["render"]
+                if render and render["status"] == "rendering":
+                    render["status"] = "error"
+                    render["error"] = "interrupted"
+                    dirty = True
+            if deck["status"] == "rendering":
+                deck["status"] = "error"
+                dirty = True
+            if dirty:
+                save_deck(deck)
+                touched += 1
+                logger.warning("swept interrupted render state in deck %s", deck["id"])
+    return touched
+
+
 def delete_deck(deck_id: str) -> None:
     d = deck_dir(deck_id)
     if not d.exists():

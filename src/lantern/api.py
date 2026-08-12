@@ -8,6 +8,7 @@ import base64
 import logging
 from logging.handlers import RotatingFileHandler
 
+from contextlib import asynccontextmanager
 from typing import Literal
 
 from fastapi import APIRouter, FastAPI, HTTPException, Request, Response
@@ -16,7 +17,7 @@ from pydantic import BaseModel, field_validator
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.staticfiles import StaticFiles
 
-from . import config, outline, store
+from . import config, gemini, outline, render_service, store
 from .outline_schema import validate_palette
 
 # ── logging idiom ───────────────────────────────────────────────────────────
@@ -31,7 +32,15 @@ _file_handler.setFormatter(logging.Formatter(
 logging.getLogger().addHandler(_file_handler)
 logger = logging.getLogger("lantern.api")
 
-app = FastAPI(title="Lantern", docs_url=None, redoc_url=None)
+@asynccontextmanager
+async def _lifespan(_app: FastAPI):
+    swept = store.sweep_interrupted()  # restarts never leave zombie state
+    if swept:
+        logger.info("boot sweep: marked interrupted renders in %d deck(s)", swept)
+    yield
+
+
+app = FastAPI(title="Lantern", docs_url=None, redoc_url=None, lifespan=_lifespan)
 
 # CORS locked to the Vite dev origin; production is same-origin via StaticFiles.
 app.add_middleware(CORSMiddleware,
@@ -164,6 +173,38 @@ def patch_deck(deck_id: str, req: PatchDeckRequest):
             deck = store.patch_slides(deck_id,
                                       [s.model_dump() for s in req.slides])
     return deck
+
+
+# ── Sprint 3: slide renderer ────────────────────────────────────────────────
+
+@api_router.post("/decks/{deck_id}/slides/{n}/render")
+def render_slide(deck_id: str, n: int):
+    _load_or_404(deck_id)
+    try:
+        return render_service.render_slide(deck_id, n)
+    except render_service.AlreadyRendering as e:
+        raise HTTPException(409, str(e))
+    except render_service.SlideNotFound as e:
+        raise HTTPException(404, str(e))
+    except gemini.RenderError as e:
+        raise HTTPException(503, str(e))
+
+
+@api_router.get("/decks/{deck_id}/slides/{n}.png")
+def slide_image(deck_id: str, n: int, request: Request):
+    deck = _load_or_404(deck_id)
+    path = store.slide_image_path(deck_id, n)
+    if not path.exists():
+        raise HTTPException(404, f"slide {n} has no image yet")
+    rendered_at = ""
+    for slide in deck["slides"]:
+        if slide["n"] == n and slide["render"]:
+            rendered_at = slide["render"].get("rendered_at") or ""
+    etag = f'"{rendered_at or int(path.stat().st_mtime)}"'
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304)
+    return Response(path.read_bytes(), media_type="image/png",
+                    headers={"ETag": etag, "Cache-Control": "no-cache"})
 
 
 app.include_router(api_router, prefix="/api")
