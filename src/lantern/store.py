@@ -11,6 +11,7 @@ import logging
 import os
 import re
 import secrets
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -165,6 +166,91 @@ def sanitize_deck(raw, fallback_id: str = "") -> dict:
         "created_at": _safe_str(raw.get("created_at"), now),
         "updated_at": _safe_str(raw.get("updated_at"), now),
     }
+
+
+# One process, many threads (API + render worker): serialize every
+# load-modify-save through this lock. Never hold it across a network call.
+LOCK = threading.RLock()
+
+
+def update_deck(deck_id: str, mutate):
+    """Load → mutate(deck) → atomic save, under LOCK. Returns the saved deck.
+    mutate may return a replacement dict or edit in place and return None."""
+    with LOCK:
+        deck = load_deck(deck_id)
+        result = mutate(deck)
+        return save_deck(result if isinstance(result, dict) else deck)
+
+
+# ── slide patch semantics ───────────────────────────────────────────────────
+
+_CONTENT_FIELDS = ("title", "points", "visual_description", "layout_hint")
+
+
+def apply_slide_patches(deck: dict, patches: list) -> tuple[dict, list]:
+    """Replace deck['slides'] with the patched, reordered list. Pure.
+
+    Each patch dict may carry 'n' — the slide's CURRENT position — to claim
+    that slide's identity (and its render block); n=None means a new slide.
+    Positions renumber contiguously from 1 in the order given. A slide keeps
+    its render block only if all content fields are untouched; otherwise the
+    render is cleared to None, because the picture no longer matches the words.
+
+    Returns (deck, moves) where moves is [(old_n, new_n), ...] for kept
+    renders whose position changed — the caller must move the PNGs to match,
+    because position == filename is the store layout.
+    """
+    existing = {s["n"]: s for s in deck["slides"]}
+    new_slides, moves = [], []
+    for i, patch in enumerate(patches):
+        n = i + 1
+        old = existing.pop(patch.get("n"), None)  # identity claims are one-shot
+        slide = {
+            "n": n,
+            "title": _safe_str(patch.get("title")),
+            "points": [p for p in patch.get("points", []) if isinstance(p, str)],
+            "visual_description": _safe_str(patch.get("visual_description")),
+            "layout_hint": _safe_str(patch.get("layout_hint")),
+            "render": None,
+        }
+        if old is not None and all(slide[f] == old[f] for f in _CONTENT_FIELDS):
+            slide["render"] = dict(old["render"]) if old["render"] else None
+            if slide["render"] and old["n"] != n:
+                moves.append((old["n"], n))
+                if slide["render"].get("image"):
+                    slide["render"]["image"] = f"slides/{slide_image_name(n)}"
+        new_slides.append(slide)
+    deck["slides"] = new_slides
+    return deck, moves
+
+
+def patch_slides(deck_id: str, patches: list) -> dict:
+    """Atomic PATCH: apply patches, move position-keyed PNGs two-phase,
+    delete orphaned PNGs, save. The one entry point for slide edits."""
+    with LOCK:
+        deck = load_deck(deck_id)
+        deck, moves = apply_slide_patches(deck, patches)
+        sdir = slides_dir(deck_id)
+        # two-phase rename so swaps can't collide
+        staged = []
+        for old_n, new_n in moves:
+            src = sdir / slide_image_name(old_n)
+            if src.exists():
+                tmp = sdir / f"move-{new_n:02d}.tmp"
+                os.replace(src, tmp)
+                staged.append((tmp, sdir / slide_image_name(new_n)))
+        for tmp, dst in staged:
+            os.replace(tmp, dst)
+        # remove PNGs no slide claims any more (deleted or content-edited slides)
+        claimed = {s["render"]["image"].rpartition("/")[2]
+                   for s in deck["slides"]
+                   if s["render"] and s["render"].get("image")}
+        if sdir.exists():
+            for png in sdir.glob("*.png"):
+                if png.name not in claimed:
+                    png.unlink()
+                    logger.info("removed orphan %s from deck %s", png.name, deck_id)
+        return save_deck(deck)
 
 
 # ── CRUD ────────────────────────────────────────────────────────────────────

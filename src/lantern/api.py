@@ -8,12 +8,16 @@ import base64
 import logging
 from logging.handlers import RotatingFileHandler
 
+from typing import Literal
+
 from fastapi import APIRouter, FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, field_validator
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.staticfiles import StaticFiles
 
-from . import config, store
+from . import config, outline, store
+from .outline_schema import validate_palette
 
 # ── logging idiom ───────────────────────────────────────────────────────────
 logging.basicConfig(level=logging.INFO,
@@ -64,6 +68,102 @@ def _load_or_404(deck_id: str) -> dict:
         raise HTTPException(404, f"deck {deck_id} not found")
     except store.StoreError as e:
         raise HTTPException(500, str(e))
+
+
+# ── Sprint 2: outline engine ────────────────────────────────────────────────
+
+class CreateDeckRequest(BaseModel):
+    topic: str
+    source_notes: str = ""
+    slide_count: int | None = None
+    style_hints: str = ""
+    slide_size: Literal["1K", "2K", "4K"] = "2K"
+
+    @field_validator("topic")
+    @classmethod
+    def topic_nonempty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("topic must be non-empty")
+        return v
+
+
+class SlidePatch(BaseModel):
+    n: int | None = None  # slide's CURRENT position, None = new slide
+    title: str = ""
+    points: list[str] = []
+    visual_description: str = ""
+    layout_hint: str = ""
+
+
+class StyleGuidePatch(BaseModel):
+    palette: list[str] | None = None
+    typography: str | None = None
+    motif: str | None = None
+    art_direction: str | None = None
+    tone: str | None = None
+
+    @field_validator("palette")
+    @classmethod
+    def palette_is_hex(cls, v):
+        if v is not None:
+            validate_palette(v)
+            if not 3 <= len(v) <= 5:
+                raise ValueError("palette must be 3-5 colors")
+        return v
+
+
+class PatchDeckRequest(BaseModel):
+    title: str | None = None
+    style_guide: StyleGuidePatch | None = None
+    slides: list[SlidePatch] | None = None
+    slide_size: Literal["1K", "2K", "4K"] | None = None
+
+
+@api_router.post("/decks")
+def create_deck(req: CreateDeckRequest):
+    count = None
+    if req.slide_count is not None:
+        count = max(1, min(config.MAX_SLIDES, req.slide_count))  # the cost guard
+    try:
+        result = outline.generate_outline(req.topic, req.source_notes, count,
+                                          req.style_hints)
+    except outline.OutlineError as e:
+        raise HTTPException(503, str(e))
+    except Exception as e:  # provider/SDK failures (bad key, network, 5xx)
+        logger.exception("outline call failed")
+        raise HTTPException(503, f"outline model unavailable: {e}")
+    deck = store.create_deck(
+        title=result.title, topic=req.topic, source_notes=req.source_notes,
+        style_guide=result.style_guide.model_dump(),
+        slides=[s.model_dump() for s in result.slides],
+        slide_size=req.slide_size)
+    return deck
+
+
+@api_router.get("/decks/{deck_id}")
+def get_deck(deck_id: str):
+    return _load_or_404(deck_id)
+
+
+@api_router.patch("/decks/{deck_id}")
+def patch_deck(deck_id: str, req: PatchDeckRequest):
+    with store.LOCK:
+        deck = _load_or_404(deck_id)
+
+        def mutate(d):
+            if req.title is not None and req.title.strip():
+                d["title"] = req.title.strip()
+            if req.slide_size is not None:
+                d["slide_size"] = req.slide_size
+            if req.style_guide is not None:
+                for key, value in req.style_guide.model_dump(exclude_none=True).items():
+                    d["style_guide"][key] = value
+
+        deck = store.update_deck(deck_id, mutate)
+        if req.slides is not None:
+            deck = store.patch_slides(deck_id,
+                                      [s.model_dump() for s in req.slides])
+    return deck
 
 
 app.include_router(api_router, prefix="/api")

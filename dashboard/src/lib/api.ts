@@ -1,7 +1,7 @@
 // The ONLY fetch site in the app — every network call goes through here.
 // Framework-free on purpose — no React imports (Sacred Invariant 5).
 
-import type { DeckSummary } from './types'
+import type { Deck, DeckSummary, SlideSize, StyleGuide } from './types'
 
 export class ApiError extends Error {
   status: number
@@ -40,4 +40,42 @@ export async function listDecks(): Promise<DeckSummary[]> {
 
 export function deleteDeck(id: string): Promise<{ ok: boolean }> {
   return request(`/api/decks/${id}`, { method: 'DELETE' })
+}
+
+export interface CreateDeckPayload {
+  topic: string
+  source_notes?: string
+  slide_count?: number | null
+  style_hints?: string
+  slide_size?: SlideSize
+}
+
+export interface SlidePatchPayload {
+  n: number | null // the slide's CURRENT server-side position; null = new slide
+  title: string
+  points: string[]
+  visual_description: string
+  layout_hint: string
+}
+
+export interface PatchDeckPayload {
+  title?: string
+  style_guide?: Partial<StyleGuide>
+  slides?: SlidePatchPayload[]
+  slide_size?: SlideSize
+}
+
+export function createDeck(payload: CreateDeckPayload): Promise<Deck> {
+  return request('/api/decks', { method: 'POST', body: JSON.stringify(payload) })
+}
+
+export function getDeck(id: string): Promise<Deck> {
+  return request(`/api/decks/${id}`)
+}
+
+export function patchDeck(id: string, payload: PatchDeckPayload): Promise<Deck> {
+  return request(`/api/decks/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  })
 }
