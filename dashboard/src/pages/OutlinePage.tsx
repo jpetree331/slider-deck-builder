@@ -75,14 +75,21 @@ export default function OutlinePage() {
     }))
     patchDeck(id, { title, style_guide: style, slides: payload, slide_size: size }).then(
       (deck) => {
-        // server renumbered contiguously in our order — refresh identities
-        setSlides((prev) =>
-          prev.map((s, i) => ({
-            ...s,
-            origN: i + 1,
-            hasRender: deck.slides[i]?.render?.status === 'done',
-          })),
-        )
+        // server renumbered contiguously in our order — refresh identities,
+        // but return the SAME array when nothing changed: a new reference
+        // would re-trigger the autosave effect and loop "editing…" forever,
+        // keeping the Render button disabled
+        setSlides((prev) => {
+          let changed = false
+          const next = prev.map((s, i) => {
+            const origN = i + 1
+            const hasRender = deck.slides[i]?.render?.status === 'done'
+            if (s.origN === origN && s.hasRender === hasRender) return s
+            changed = true
+            return { ...s, origN, hasRender }
+          })
+          return changed ? next : prev
+        })
         setSaveState('saved')
       },
       (e) => {
