@@ -54,6 +54,7 @@ Every knob is documented inline in `.env.example` — keys, port, data dir, pass
 | Chat says "API key rejected" | Wrong or expired key for that provider | Fix `ANTHROPIC_API_KEY` (Claude models) or `GEMINI_API_KEY` (Gemini models) in `.env`, restart |
 | Chat says "unreachable — check the network" | That provider's host is blocked or the connection dropped | On a filtered network, switch the dropdown to a model whose host is allowed; partial replies are kept |
 | Chalk tab missing after an update | Frontend rebuilt but service not restarted (or vice versa) | `npm run build` in `dashboard/`, then restart the service |
+| Attachment says "no readable text or images" | Scanned/image-only PDF with nothing extractable, or a password-protected file | Paste the text into source notes instead; unlock protected PDFs first |
 | Images look stale after a repaint | Aggressive proxy cache | Hard refresh; image URLs are versioned by `rendered_at` and the API sends `no-cache` + ETag, so plain reloads always revalidate |
 
 ## Do-not-disturb inventory

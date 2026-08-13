@@ -34,3 +34,42 @@
   padding: var(--space-3) var(--space-5);
   font-size: 15px;
 }
+
+.attach-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-weight: 400;
+}
+
+.image-chips {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  font-weight: 400;
+}
+
+.image-chip {
+  position: relative;
+  display: inline-flex;
+}
+
+.image-chip img {
+  height: 48px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  display: block;
+}
+
+.chip-x {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  padding: 0 4px;
+  background: var(--canvas-overlay);
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  font-size: 11px;
+  line-height: 1.3;
+}

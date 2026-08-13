@@ -21,6 +21,8 @@ Click **Chalk — chat** in the header (or go to `/chalk`). A *project* holds in
 
 ## Honest answers to fair questions
 
+**Can I hand it an old deck to revamp?** Yes — on New Deck, attach a PDF, DOCX, or PPTX. Its text (including PPTX speaker notes) lands in the source-notes box where you can edit it, and up to 8 of its images travel to the outline model so it can see the original's look. Then say what you want in the topic box: "Revamp this deck — keep the arc, tighten the text, warmer colors." Honest limit: it reads the document's text and embedded images, not a screenshot of each slide's layout — and a scanned PDF with no real text won't extract (paste the text instead). The attached file itself is never stored.
+
 **What does a deck cost?** Each painted slide is about $0.13 at the default 2K size, so a 10-slide deck is roughly $1.30–1.50, plus a penny or so for the outline. 4K roughly doubles the pictures' cost. The Render button always shows the estimate before you spend, and there's a hard 16-slide cap per deck.
 
 **Why did repainting slide 1 not change the other slides?** Slide 1 is the style anchor: when slides 2+ are painted, they look at slide 1's picture *at that moment*. Repainting slide 1 later doesn't reach back and restyle the others — repaint them too if you want them to follow the new look.

@@ -50,7 +50,8 @@ Rules:
 - "layout_hint" is one of: title card, split, full-bleed diagram, big number, quote, closer.
 - Build a deliberate arc: slide 1 is a title card; the middle teaches one idea per slide; the final slide is a closer.
 - "visual_description" says what the picture IS — subject, composition, focal point — never abstract vibes.
-- When no slide count is requested, choose 6-12 slides."""
+- When no slide count is requested, choose 6-12 slides.
+- When images from the user's source material are attached, study them: carry their subject matter and visual character into "art_direction" and the "visual_description"s — unless the user's ask is to depart from that look, in which case depart deliberately."""
 
 
 def _user_message(topic: str, source_notes: str, slide_count_hint: int | None,
@@ -82,13 +83,32 @@ def _default_client():
 
 def generate_outline(topic: str, source_notes: str = "",
                      slide_count_hint: int | None = None,
-                     style_hints: str = "", client=None) -> DeckOutline:
+                     style_hints: str = "", client=None,
+                     images: list | None = None) -> DeckOutline:
     """One Haiku call; on invalid JSON, exactly one repair round-trip carrying
-    the validator errors back; then fail cleanly with the raw text logged."""
+    the validator errors back; then fail cleanly with the raw text logged.
+
+    images: optional [{media_type, data(b64), note}] pulled from attachments —
+    sent as vision blocks so the outline can see the source material's look.
+    Consumed by this one call, never stored."""
     client = client or _default_client()
-    messages = [{"role": "user",
-                 "content": _user_message(topic, source_notes, slide_count_hint,
-                                          style_hints)}]
+    text = _user_message(topic, source_notes, slide_count_hint, style_hints)
+    if images:
+        content = [{"type": "image",
+                    "source": {"type": "base64",
+                               "media_type": img["media_type"],
+                               "data": img["data"]}}
+                   for img in images]
+        notes = ", ".join(img.get("note") or "attachment" for img in images)
+        content.append({"type": "text", "text": (
+            f"{text}\n\nATTACHED VISUALS: the {len(images)} image(s) above "
+            f"come from the user's source material ({notes}). Study their "
+            "subject matter and visual character before writing the "
+            "art_direction.")})
+        messages = [{"role": "user", "content": content}]
+        logger.info("outline call carries %d attached image(s)", len(images))
+    else:
+        messages = [{"role": "user", "content": text}]
     last_raw = ""
     for attempt in ("first", "repair"):
         resp = client.messages.create(model=config.OUTLINE_MODEL,

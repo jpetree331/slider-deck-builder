@@ -2,6 +2,9 @@
 
 Reverse-chronological. Records reversals too.
 
+## 2026-08-13 · Attachments · Extract-and-discard, with vision
+PDF/DOCX/PPTX attachments extract server-side (pypdf / python-docx / the python-pptx we already ship): text lands in the editable source-notes box (invariant 6 — the user sees exactly what Haiku gets), and up to 8 embedded images (deduped, icon-filtered, downscaled to ≤1024px JPEG) ride to the ONE outline call as Haiku vision blocks so a "revamp this deck" can carry the original's visual character. Files are never written to disk; decks stay pictures + one JSON. Known limit, stated in the UI and README: embedded images and text — not a rasterized screenshot of each slide (that would require PowerPoint itself).
+
 ## 2026-08-13 · Chalk · Consolidated into Lantern as the /chalk tab
 Chalk (`chalk_master_plan.md`) shares Lantern's chassis by design — same FastAPI + built-Vite shape, same fonts/tokens, same port claims. One app resolves the 8020/5179 collision. Owner call: dropdown = Haiku (default) + Gemini models instead of the plan's Sonnet, since both keys already live in `.env`. Routes namespaced `/api/chalk/*` (diverges from the plan's bare `/api/projects` to avoid colliding with deck routes).
 

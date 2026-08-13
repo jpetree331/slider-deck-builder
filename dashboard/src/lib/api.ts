@@ -12,8 +12,10 @@ export class ApiError extends Error {
 }
 
 export async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  // FormData sets its own multipart boundary — only JSON bodies get a header
+  const jsonBody = init?.body != null && !(init.body instanceof FormData)
   const res = await fetch(path, {
-    headers: init?.body ? { 'Content-Type': 'application/json' } : undefined,
+    headers: jsonBody ? { 'Content-Type': 'application/json' } : undefined,
     ...init,
   })
   if (!res.ok) {
@@ -53,6 +55,7 @@ export interface CreateDeckPayload {
   slide_count?: number | null
   style_hints?: string
   slide_size?: SlideSize
+  images?: AttachedImage[] // ride to the one outline call, then discarded
 }
 
 export interface SlidePatchPayload {
@@ -99,6 +102,28 @@ export function renderSlide(id: string, n: number): Promise<Deck> {
 
 export function duplicateDeck(id: string): Promise<Deck> {
   return request(`/api/decks/${id}/duplicate`, { method: 'POST' })
+}
+
+export interface AttachedImage {
+  media_type: string
+  data: string // base64 — already downscaled server-side
+  note: string // e.g. "slide 3", "page 2"
+}
+
+export interface ExtractResult {
+  filename: string
+  kind: 'pdf' | 'docx' | 'pptx'
+  text: string
+  chars: number
+  truncated: boolean
+  images: AttachedImage[]
+}
+
+/** Extract an attachment's text server-side. The file is never stored. */
+export function extractFile(file: File): Promise<ExtractResult> {
+  const form = new FormData()
+  form.append('file', file)
+  return request('/api/extract', { method: 'POST', body: form })
 }
 
 export type ExportFormat = 'pptx' | 'pdf' | 'zip'

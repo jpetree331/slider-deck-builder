@@ -8,3 +8,7 @@ python-dotenv>=1.0
 Pillow
 python-pptx
 img2pdf
+# source-material attachments (extract-to-text for the outline)
+pypdf
+python-docx
+python-multipart

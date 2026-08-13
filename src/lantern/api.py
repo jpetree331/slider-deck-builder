@@ -18,7 +18,10 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.staticfiles import StaticFiles
 
-from . import chalk_db, config, export, outline, queue, render_service, store
+from fastapi import File, UploadFile
+
+from . import (chalk_db, config, export, extract, outline, queue,
+               render_service, store)
 from .chalk_api import chalk_router
 from .outline_schema import MAX_POINT_WORDS, MAX_POINTS, validate_palette
 
@@ -78,18 +81,40 @@ def _load_or_404(deck_id: str) -> dict:
 
 # ── Sprint 2: outline engine ────────────────────────────────────────────────
 
+class AttachedImage(BaseModel):
+    """One image pulled from an attachment — rides to the outline call only."""
+    media_type: Literal["image/jpeg", "image/png", "image/webp", "image/gif"]
+    data: str  # base64
+    note: str = ""
+
+    @field_validator("data")
+    @classmethod
+    def data_bounded(cls, v: str) -> str:
+        if len(v) > 3_000_000:  # ~2.2 MB binary — extraction downscales far below this
+            raise ValueError("attached image too large")
+        return v
+
+
 class CreateDeckRequest(BaseModel):
     topic: str
     source_notes: str = ""
     slide_count: int | None = None
     style_hints: str = ""
     slide_size: Literal["1K", "2K", "4K"] = "2K"
+    images: list[AttachedImage] = []
 
     @field_validator("topic")
     @classmethod
     def topic_nonempty(cls, v: str) -> str:
         if not v.strip():
             raise ValueError("topic must be non-empty")
+        return v
+
+    @field_validator("images")
+    @classmethod
+    def images_capped(cls, v):
+        if len(v) > extract.MAX_IMAGES:
+            raise ValueError(f"at most {extract.MAX_IMAGES} attached images")
         return v
 
 
@@ -159,8 +184,9 @@ def create_deck(req: CreateDeckRequest):
     if req.slide_count is not None:
         count = max(1, min(config.MAX_SLIDES, req.slide_count))  # the cost guard
     try:
-        result = outline.generate_outline(req.topic, req.source_notes, count,
-                                          req.style_hints)
+        result = outline.generate_outline(
+            req.topic, req.source_notes, count, req.style_hints,
+            images=[img.model_dump() for img in req.images] or None)
     except outline.OutlineError as e:
         raise HTTPException(503, str(e))
     except Exception as e:  # provider/SDK failures (bad key, network, 5xx)
@@ -172,6 +198,20 @@ def create_deck(req: CreateDeckRequest):
         slides=[s.model_dump() for s in result.slides],
         slide_size=req.slide_size)
     return deck
+
+
+@api_router.post("/extract")
+def extract_attachment(file: UploadFile = File(...)):
+    """Stateless helper: attachment in, plain text out. The text goes into
+    the source-notes box client-side; the file itself is never stored."""
+    data = file.file.read(extract.MAX_FILE_BYTES + 1)
+    if len(data) > extract.MAX_FILE_BYTES:
+        raise HTTPException(413, "file is over 20 MB — trim it or paste "
+                                 "the relevant text")
+    try:
+        return extract.extract_content(file.filename or "attachment", data)
+    except extract.ExtractError as e:
+        raise HTTPException(422, str(e))
 
 
 @api_router.get("/decks/{deck_id}")
