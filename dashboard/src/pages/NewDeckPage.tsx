@@ -17,12 +17,13 @@ export default function NewDeckPage() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [extracting, setExtracting] = useState<string | null>(null)
+  const [attachError, setAttachError] = useState<string | null>(null)
   const [images, setImages] = useState<AttachedImage[]>([])
   const fileInput = useRef<HTMLInputElement>(null)
 
   async function attachFiles(files: FileList | null) {
     if (!files?.length) return
-    setError(null)
+    setAttachError(null)
     for (const file of Array.from(files)) {
       setExtracting(file.name)
       try {
@@ -37,7 +38,13 @@ export default function NewDeckPage() {
           setImages((prev) => [...prev, ...result.images].slice(0, MAX_ATTACHED_IMAGES))
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : String(err))
+        // shown right beside the button — an attach failure must never just blink
+        const message = err instanceof Error ? err.message : String(err)
+        setAttachError(
+          message === 'Not Found'
+            ? 'the running service is older than this page — restart Lantern, then retry'
+            : `${file.name}: ${message}`,
+        )
       }
     }
     setExtracting(null)
@@ -113,10 +120,14 @@ export default function NewDeckPage() {
           >
             {extracting ? `Reading ${extracting}…` : '📎 Attach PDF / DOCX / PPTX'}
           </button>
-          <span className="hint">
-            text lands right here to edit; the document's images ride along so the outline can see
-            the original look — the file itself isn't kept
-          </span>
+          {attachError ? (
+            <span className="attach-error">{attachError}</span>
+          ) : (
+            <span className="hint">
+              text lands right here to edit; the document's images ride along so the outline can
+              see the original look — the file itself isn't kept
+            </span>
+          )}
         </span>
         {images.length > 0 && (
           <span className="image-chips">

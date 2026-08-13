@@ -42,6 +42,11 @@
   font-weight: 400;
 }
 
+.attach-error {
+  color: var(--err);
+  font-size: 13px;
+}
+
 .image-chips {
   display: flex;
   align-items: center;
