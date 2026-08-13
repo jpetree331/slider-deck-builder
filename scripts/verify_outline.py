@@ -139,17 +139,60 @@ check("shifted slide keeps render, re-keyed",
 
 store.delete_deck(deck["id"])
 
-print("verify_outline: live Haiku call")
-if os.environ.get("ANTHROPIC_API_KEY"):
+print("verify_outline: gemini path (stubbed REST)")
+from src.lantern import gemini, outline as outline_mod  # noqa: E402
+
+gemini_calls = []
+real_generate_text = gemini.generate_text
+
+
+def stub_generate_text(model, system, contents, max_tokens=8192,
+                       force_json=False):
+    gemini_calls.append({"model": model, "contents": [dict(c) for c in contents],
+                         "force_json": force_json})
+    if len(gemini_calls) == 1:
+        return "definitely not json"
+    return VALID
+
+
+outline_mod.gemini.generate_text = stub_generate_text
+try:
+    result = generate_outline(
+        "enzymes", model="gemini-3.1-pro-preview",
+        images=[{"media_type": "image/jpeg", "data": "aGk=", "note": "page 1"}])
+    check("gemini path validates after one repair",
+          result.title == "How Enzymes Work" and len(gemini_calls) == 2)
+    first = gemini_calls[0]
+    check("gemini path forces JSON responses", first["force_json"])
+    parts = first["contents"][0]["parts"]
+    check("images map to inline_data parts ahead of the text",
+          "inline_data" in parts[0] and "text" in parts[-1])
+    check("repair round-trip carries the model turn",
+          gemini_calls[1]["contents"][1]["role"] == "model")
+    check("claude-* ids still use the injected anthropic client",
+          generate_outline("x", client=StubClient([VALID]),
+                           model="claude-haiku-4-5-20251001").title
+          == "How Enzymes Work")
+finally:
+    outline_mod.gemini.generate_text = real_generate_text
+
+print("verify_outline: live outline call (configured model)")
+from src.lantern import config as cfg  # noqa: E402
+
+provider_key = (os.environ.get("GEMINI_API_KEY")
+                if cfg.OUTLINE_MODEL.startswith("gemini")
+                else os.environ.get("ANTHROPIC_API_KEY"))
+if provider_key:
     live = generate_outline("How enzymes work", slide_count_hint=7)
     check("live outline validates", live.title.strip() != "")
     check("live outline honors slide count", len(live.slides) == 7)
-    check("live art_direction is a real paragraph", len(live.art_direction_words()) > 15
-          if hasattr(live, "art_direction_words")
-          else len(live.style_guide.art_direction.split()) > 15)
+    check("live art_direction is a real paragraph",
+          len(live.style_guide.art_direction.split()) > 15)
+    print(f"        model: {cfg.OUTLINE_MODEL}")
+    print(f"        art_direction: {live.style_guide.art_direction[:160]}...")
 else:
-    print("  SKIPPED — ANTHROPIC_API_KEY not set; run again with the key to "
-          "exercise the real model (≈ $0.01)")
+    print("  SKIPPED — no API key for the configured outline model "
+          f"({cfg.OUTLINE_MODEL}); run with the key to exercise it (~ cents)")
 
 if FAILS:
     print(f"\n{len(FAILS)} FAILURES: {FAILS}")

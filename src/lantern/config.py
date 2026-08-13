@@ -15,7 +15,10 @@ DATA_DIR = Path(os.environ.get("LANTERN_DATA_DIR", "data"))
 if not DATA_DIR.is_absolute():
     DATA_DIR = REPO_ROOT / DATA_DIR
 PASSWORD = os.environ.get("LANTERN_PASSWORD", "")
-OUTLINE_MODEL = os.environ.get("LANTERN_OUTLINE_MODEL", "claude-haiku-4-5-20251001")
+# Owner reversal 2026-08-13 (see DECISIONS.md): Gemini 3.1 Pro writes richer
+# image briefs than Haiku did. Any claude-* id here routes back through the
+# Anthropic SDK — Haiku remains one .env edit away.
+OUTLINE_MODEL = os.environ.get("LANTERN_OUTLINE_MODEL", "gemini-3.1-pro-preview")
 IMAGE_MODEL = os.environ.get("LANTERN_IMAGE_MODEL", "gemini-3-pro-image-preview")
 MAX_SLIDES = int(os.environ.get("LANTERN_MAX_SLIDES", "16"))
 

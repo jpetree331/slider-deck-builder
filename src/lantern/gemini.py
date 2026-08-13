@@ -25,7 +25,11 @@ REF_INSTRUCTION = ("Match the visual style, palette, and typographic treatment "
                    "of this reference slide exactly; change only the content.")
 
 
-class RenderError(Exception):
+class GeminiError(Exception):
+    """Gemini provider failure — maps to HTTP 503."""
+
+
+class RenderError(GeminiError):
     """Provider failure or no image in the response — maps to HTTP 503."""
 
 
@@ -60,6 +64,40 @@ def _extract_image(data: dict) -> bytes:
             texts.append(part["text"])
     detail = " / ".join(texts) or f"empty response: {str(data)[:300]}"
     raise RenderError(f"model returned no image — {detail}")
+
+
+def generate_text(model: str, system: str, contents: list,
+                  max_tokens: int = 8192, force_json: bool = False) -> str:
+    """Non-streaming text generation — used by the outline engine when the
+    outline model is a Gemini id. contents follows the REST shape
+    ([{role, parts}]); images ride as inline_data parts."""
+    if not config.GEMINI_API_KEY:
+        raise GeminiError("GEMINI_API_KEY is not set — add it to .env")
+    body = {"contents": contents,
+            "generationConfig": {"maxOutputTokens": max_tokens}}
+    if force_json:
+        body["generationConfig"]["responseMimeType"] = "application/json"
+    if system:
+        body["systemInstruction"] = {"parts": [{"text": system}]}
+    url = ENDPOINT.format(model=model)
+    try:
+        resp = httpx.post(url, json=body,
+                          headers={"x-goog-api-key": config.GEMINI_API_KEY},
+                          timeout=TIMEOUT_S)
+    except httpx.TransportError as e:
+        raise GeminiError(f"generativelanguage.googleapis.com unreachable — {e}")
+    if resp.status_code >= 400:
+        raise GeminiError(f"Gemini {model} error HTTP {resp.status_code}: "
+                          f"{resp.text[:300]}")
+    data = resp.json()
+    candidates = data.get("candidates") or []
+    parts = (candidates[0].get("content") or {}).get("parts", []) if candidates else []
+    text = "".join(p.get("text", "") for p in parts)
+    if not text.strip():
+        reason = (candidates[0].get("finishReason") if candidates
+                  else data.get("promptFeedback", {}).get("blockReason", "empty"))
+        raise GeminiError(f"Gemini {model} returned no text ({reason})")
+    return text
 
 
 def render_image(prompt: str, size: str, style_ref_png: bytes | None = None) -> bytes:

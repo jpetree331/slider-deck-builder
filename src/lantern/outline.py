@@ -8,7 +8,7 @@ import re
 
 from pydantic import ValidationError
 
-from . import config
+from . import config, gemini
 from .outline_schema import DeckOutline
 
 logger = logging.getLogger("lantern.outline")
@@ -44,6 +44,7 @@ Respond with STRICT JSON only — no markdown fences, no commentary — matching
 }
 
 Rules:
+- The painter is a state-of-the-art image model: it renders any subject, material, lighting, or style beautifully — photoreal scenes, painterly texture, dramatic macro, sculptural typography. Do NOT write timid, clip-art-shaped briefs; every "visual_description" should describe an image worth framing, and "art_direction" should be a look worth stealing.
 - "art_direction" is the deck's entire visual identity — palette in words, texture, lighting, typographic attitude — written so an image model can obey it verbatim on every single slide. One concrete paragraph. No hedging, no options.
 - "palette" is 3 to 5 hex colors chosen for the topic, darkest first.
 - Slide text gets PAINTED into the image. Titles: short, declarative, spelling-critical. Points: at most 4 per slide, at most 12 words each; many slides are stronger with 0-2 points. Never write a paragraph as a point.
@@ -81,54 +82,92 @@ def _default_client():
     return anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
 
 
+def _visuals_note(text: str, images: list) -> str:
+    notes = ", ".join(img.get("note") or "attachment" for img in images)
+    return (f"{text}\n\nATTACHED VISUALS: the {len(images)} image(s) above "
+            f"come from the user's source material ({notes}). Study their "
+            "subject matter and visual character before writing the "
+            "art_direction.")
+
+
+def _repair_message(error) -> str:
+    return ("Your previous response failed validation with these errors:\n"
+            f"{error}\n\nReply again with corrected STRICT JSON only, "
+            "same schema, no commentary.")
+
+
 def generate_outline(topic: str, source_notes: str = "",
                      slide_count_hint: int | None = None,
                      style_hints: str = "", client=None,
-                     images: list | None = None) -> DeckOutline:
-    """One Haiku call; on invalid JSON, exactly one repair round-trip carrying
-    the validator errors back; then fail cleanly with the raw text logged.
+                     images: list | None = None,
+                     model: str | None = None) -> DeckOutline:
+    """One outline call; on invalid JSON, exactly one repair round-trip
+    carrying the validator errors back; then fail cleanly, raw text logged.
+
+    Provider-aware: gemini-* model ids go over Gemini REST
+    (gemini.generate_text), anything else through the Anthropic SDK.
+    Passing `client` forces the Anthropic path (the test-injection seam).
 
     images: optional [{media_type, data(b64), note}] pulled from attachments —
     sent as vision blocks so the outline can see the source material's look.
     Consumed by this one call, never stored."""
-    client = client or _default_client()
+    model = model or config.OUTLINE_MODEL
+    use_gemini = client is None and model.startswith("gemini")
     text = _user_message(topic, source_notes, slide_count_hint, style_hints)
     if images:
-        content = [{"type": "image",
-                    "source": {"type": "base64",
-                               "media_type": img["media_type"],
-                               "data": img["data"]}}
-                   for img in images]
-        notes = ", ".join(img.get("note") or "attachment" for img in images)
-        content.append({"type": "text", "text": (
-            f"{text}\n\nATTACHED VISUALS: the {len(images)} image(s) above "
-            f"come from the user's source material ({notes}). Study their "
-            "subject matter and visual character before writing the "
-            "art_direction.")})
-        messages = [{"role": "user", "content": content}]
         logger.info("outline call carries %d attached image(s)", len(images))
+
+    if use_gemini:
+        parts = [{"inline_data": {"mime_type": img["media_type"],
+                                  "data": img["data"]}}
+                 for img in images or []]
+        parts.append({"text": _visuals_note(text, images) if images else text})
+        contents = [{"role": "user", "parts": parts}]
+
+        def complete() -> str:
+            return gemini.generate_text(model, SYSTEM_PROMPT, contents,
+                                        max_tokens=MAX_TOKENS, force_json=True)
+
+        def append_repair(raw: str, error) -> None:
+            contents.append({"role": "model", "parts": [{"text": raw}]})
+            contents.append({"role": "user",
+                             "parts": [{"text": _repair_message(error)}]})
     else:
-        messages = [{"role": "user", "content": text}]
+        client = client or _default_client()
+        if images:
+            content = [{"type": "image",
+                        "source": {"type": "base64",
+                                   "media_type": img["media_type"],
+                                   "data": img["data"]}}
+                       for img in images]
+            content.append({"type": "text", "text": _visuals_note(text, images)})
+        else:
+            content = text
+        messages = [{"role": "user", "content": content}]
+
+        def complete() -> str:
+            resp = client.messages.create(model=model, max_tokens=MAX_TOKENS,
+                                          system=SYSTEM_PROMPT,
+                                          messages=messages)
+            return "".join(block.text for block in resp.content
+                           if getattr(block, "type", "") == "text")
+
+        def append_repair(raw: str, error) -> None:
+            messages.append({"role": "assistant", "content": raw})
+            messages.append({"role": "user", "content": _repair_message(error)})
+
     last_raw = ""
     for attempt in ("first", "repair"):
-        resp = client.messages.create(model=config.OUTLINE_MODEL,
-                                      max_tokens=MAX_TOKENS,
-                                      system=SYSTEM_PROMPT, messages=messages)
-        last_raw = "".join(block.text for block in resp.content
-                           if getattr(block, "type", "") == "text")
+        last_raw = complete()
         try:
             outline = DeckOutline.model_validate(_extract_json(last_raw))
-            logger.info("outline ok on %s attempt: %r, %d slides",
-                        attempt, outline.title, len(outline.slides))
+            logger.info("outline ok on %s attempt via %s: %r, %d slides",
+                        attempt, model, outline.title, len(outline.slides))
             return outline
         except (ValueError, ValidationError) as e:
             if attempt == "repair":
                 break
             logger.warning("outline invalid, sending one repair round-trip: %s", e)
-            messages.append({"role": "assistant", "content": last_raw})
-            messages.append({"role": "user", "content": (
-                "Your previous response failed validation with these errors:\n"
-                f"{e}\n\nReply again with corrected STRICT JSON only, "
-                "same schema, no commentary.")})
+            append_repair(last_raw, e)
     logger.error("outline failed after repair; raw response:\n%s", last_raw)
     raise OutlineError("outline model returned invalid JSON twice; raw text logged")

@@ -2,6 +2,9 @@
 
 Reverse-chronological. Records reversals too.
 
+## 2026-08-13 · Outline · REVERSAL of Locked Decision 3's outline pin — Gemini 3.1 Pro replaces Haiku
+Owner call, with a stated reason: Haiku wrote the per-slide image briefs "as if it were making the images out of code" — timid, diagram-shaped — while the painter can render anything. `generate_outline` is now provider-aware (`gemini-*` → REST with forced-JSON responses; `claude-*` → Anthropic SDK; same prompt, validators, and single repair round-trip either way), the default is `gemini-3.1-pro-preview`, and the system prompt now explicitly tells the writer it is briefing a state-of-the-art image model. Haiku is one `.env` edit away (`LANTERN_OUTLINE_MODEL=claude-haiku-4-5-20251001`). Outline cost rises from ~1¢ to a few cents.
+
 ## 2026-08-13 · Attachments · Extract-and-discard, with vision
 PDF/DOCX/PPTX attachments extract server-side (pypdf / python-docx / the python-pptx we already ship): text lands in the editable source-notes box (invariant 6 — the user sees exactly what Haiku gets), and up to 8 embedded images (deduped, icon-filtered, downscaled to ≤1024px JPEG) ride to the ONE outline call as Haiku vision blocks so a "revamp this deck" can carry the original's visual character. Files are never written to disk; decks stay pictures + one JSON. Known limit, stated in the UI and README: embedded images and text — not a rasterized screenshot of each slide (that would require PowerPoint itself).
 

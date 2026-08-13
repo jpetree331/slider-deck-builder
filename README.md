@@ -2,7 +2,7 @@
 
 Type a topic, get a presentation where every slide is a single beautiful picture. And in the **Chalk** tab: a private Claude/Gemini chat with Projects, for lesson planning on networks where claude.ai is filtered but the APIs aren't.
 
-Claude Haiku writes the outline and a style guide; Gemini's Nano Banana Pro paints every slide as one 16:9 image; Lantern keeps them coherent, lets you edit and repaint, and exports to PowerPoint, PDF, or a zip of pictures. Everything lives on your own machine — a deck is just a folder.
+Gemini 3.1 Pro writes the outline and a style guide (it briefs the painter ambitiously; Claude Haiku remains one `.env` edit away); Gemini's Nano Banana Pro paints every slide as one 16:9 image; Lantern keeps them coherent, lets you edit and repaint, and exports to PowerPoint, PDF, or a zip of pictures. Everything lives on your own machine — a deck is just a folder.
 
 ## Make a deck in three moves
 
@@ -23,7 +23,7 @@ Click **Chalk — chat** in the header (or go to `/chalk`). A *project* holds in
 
 **Can I hand it an old deck to revamp?** Yes — on New Deck, attach a PDF, DOCX, or PPTX. Its text (including PPTX speaker notes) lands in the source-notes box where you can edit it, and up to 8 of its images travel to the outline model so it can see the original's look. Then say what you want in the topic box: "Revamp this deck — keep the arc, tighten the text, warmer colors." Honest limit: it reads the document's text and embedded images, not a screenshot of each slide's layout — and a scanned PDF with no real text won't extract (paste the text instead). The attached file itself is never stored.
 
-**What does a deck cost?** Each painted slide is about $0.13 at the default 2K size, so a 10-slide deck is roughly $1.30–1.50, plus a penny or so for the outline. 4K roughly doubles the pictures' cost. The Render button always shows the estimate before you spend, and there's a hard 16-slide cap per deck.
+**What does a deck cost?** Each painted slide is about $0.13 at the default 2K size, so a 10-slide deck is roughly $1.30–1.50, plus a few cents for the outline. 4K roughly doubles the pictures' cost. The Render button always shows the estimate before you spend, and there's a hard 16-slide cap per deck.
 
 **Why did repainting slide 1 not change the other slides?** Slide 1 is the style anchor: when slides 2+ are painted, they look at slide 1's picture *at that moment*. Repainting slide 1 later doesn't reach back and restyle the others — repaint them too if you want them to follow the new look.
 

@@ -76,8 +76,8 @@ export default function NewDeckPage() {
     <form className="new-deck" onSubmit={submit}>
       <h1>New deck</h1>
       <p className="new-deck-lede">
-        Say what the deck is about. Haiku sketches the outline and a style guide;
-        you edit; then the painting starts.
+        Say what the deck is about. The outline model sketches the slides and a style
+        guide; you edit; then the painting starts.
       </p>
 
       <label>
@@ -184,7 +184,7 @@ export default function NewDeckPage() {
       {error && <div className="state-note error">{error}</div>}
 
       <button className="primary new-deck-submit" disabled={busy || !topic.trim()}>
-        {busy ? 'Haiku is sketching the outline…' : 'Draft the outline'}
+        {busy ? 'Sketching the outline…' : 'Draft the outline'}
       </button>
     </form>
   )
