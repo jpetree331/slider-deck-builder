@@ -18,7 +18,8 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.staticfiles import StaticFiles
 
-from . import config, export, outline, queue, render_service, store
+from . import chalk_db, config, export, outline, queue, render_service, store
+from .chalk_api import chalk_router
 from .outline_schema import MAX_POINT_WORDS, MAX_POINTS, validate_palette
 
 # ── logging idiom ───────────────────────────────────────────────────────────
@@ -38,6 +39,7 @@ async def _lifespan(_app: FastAPI):
     swept = store.sweep_interrupted()  # restarts never leave zombie state
     if swept:
         logger.info("boot sweep: marked interrupted renders in %d deck(s)", swept)
+    chalk_db.migrate()  # idempotent — numbered SQL, safe on every boot
     yield
 
 
@@ -285,6 +287,7 @@ def slide_image(deck_id: str, n: int, request: Request):
                     headers={"ETag": etag, "Cache-Control": "no-cache"})
 
 
+api_router.include_router(chalk_router)  # the Chalk chat tab: /api/chalk/*
 app.include_router(api_router, prefix="/api")
 
 

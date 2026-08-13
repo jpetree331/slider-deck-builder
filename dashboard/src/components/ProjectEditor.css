@@ -1,0 +1,40 @@
+.project-editor {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.project-editor-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+}
+
+.project-editor-name {
+  flex: 1;
+  font-family: var(--font-display);
+  font-size: 22px;
+  background: transparent;
+  border: 1px solid transparent;
+}
+
+.project-editor-name:hover,
+.project-editor-name:focus {
+  border-color: var(--line);
+}
+
+.project-editor label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.project-editor .hint {
+  font-weight: 400;
+  color: var(--ink-faint);
+}

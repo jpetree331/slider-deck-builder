@@ -22,4 +22,13 @@ MAX_SLIDES = int(os.environ.get("LANTERN_MAX_SLIDES", "16"))
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 
+# Chalk (the chat tab) — CHALK_-prefixed knobs, consolidated from its plan
+CHALK_DB_PATH = Path(os.environ.get("CHALK_DB_PATH", "data/chalk.db"))
+if not CHALK_DB_PATH.is_absolute():
+    CHALK_DB_PATH = REPO_ROOT / CHALK_DB_PATH
+CHALK_DEFAULT_MODEL = os.environ.get("CHALK_DEFAULT_MODEL", "claude-haiku-4-5")
+CHALK_MAX_TOKENS = int(os.environ.get("CHALK_MAX_TOKENS", "8192"))
+CHALK_HISTORY_CHAR_BUDGET = int(os.environ.get("CHALK_HISTORY_CHAR_BUDGET",
+                                               "100000"))
+
 VITE_DEV_ORIGIN = "http://localhost:5179"

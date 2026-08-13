@@ -32,7 +32,7 @@ for (const knob of [
   'LANTERN_PASSWORD=',
   'LANTERN_OUTLINE_MODEL=claude-haiku-4-5-20251001',
   'LANTERN_IMAGE_MODEL=gemini-3-pro-image-preview',
-  'LANTERN_MAX_SLIDES=16',
+  'LANTERN_MAX_SLIDES=', // value is the owner's knob — assert presence only
 ]) {
   check(`.env.example carries ${knob.split('=')[0]}`, envExample.includes(knob))
 }

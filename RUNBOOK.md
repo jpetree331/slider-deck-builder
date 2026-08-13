@@ -27,7 +27,13 @@
 
 ## Env knobs
 
-Every knob is documented inline in `.env.example` — keys, port, data dir, password, model pins, slide cap. `.env` overrides shell env (path-anchored `load_dotenv(..., override=True)`).
+Every knob is documented inline in `.env.example` — keys, port, data dir, password, model pins, slide cap, plus the `CHALK_*` chat knobs (db path, default model, token/history budgets). `.env` overrides shell env (path-anchored `load_dotenv(..., override=True)`).
+
+## Chalk (the chat tab)
+
+- Chat data is ONE file: `data/chalk.db` (SQLite). Back it up by copying it — it rides the same zip ritual as the deck folders. Deletes in the UI are soft (tombstones); the rows stay in the file.
+- The model dropdown lives in `dashboard/src/config/models.ts`, mirrored by the allowlist in `src/lantern/chalk_chat.py` — to add a model, edit BOTH, then `npm run build` and restart. `verify_chalk.py` fails if they drift.
+- Log lines carry ids, timings, and token counts — never message text (it's a school laptop).
 
 ## Logs
 
@@ -45,6 +51,9 @@ Every knob is documented inline in `.env.example` — keys, port, data dir, pass
 | Browser asks for a password | `LANTERN_PASSWORD` is set | That's the point — any username, that password. Blank it in `.env` and restart to disable |
 | Everything 401s from a phone over Tailscale | Password set, phone browser cached bad credentials | Reopen the site, re-enter; or use an incognito tab |
 | Deck folder exists but the library shows nothing / skips it | Corrupt `deck.json` (the log says "skipping unreadable deck folder") | The PNGs are safe. Restore `deck.json` from a backup zip, or rebuild it by hand from the schema in `BUILD_BRIEF.md` |
+| Chat says "API key rejected" | Wrong or expired key for that provider | Fix `ANTHROPIC_API_KEY` (Claude models) or `GEMINI_API_KEY` (Gemini models) in `.env`, restart |
+| Chat says "unreachable — check the network" | That provider's host is blocked or the connection dropped | On a filtered network, switch the dropdown to a model whose host is allowed; partial replies are kept |
+| Chalk tab missing after an update | Frontend rebuilt but service not restarted (or vice versa) | `npm run build` in `dashboard/`, then restart the service |
 | Images look stale after a repaint | Aggressive proxy cache | Hard refresh; image URLs are versioned by `rendered_at` and the API sends `no-cache` + ETag, so plain reloads always revalidate |
 
 ## Do-not-disturb inventory

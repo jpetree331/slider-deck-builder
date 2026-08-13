@@ -1,6 +1,6 @@
 # Lantern 🏮
 
-Type a topic, get a presentation where every slide is a single beautiful picture.
+Type a topic, get a presentation where every slide is a single beautiful picture. And in the **Chalk** tab: a private Claude/Gemini chat with Projects, for lesson planning on networks where claude.ai is filtered but the APIs aren't.
 
 Claude Haiku writes the outline and a style guide; Gemini's Nano Banana Pro paints every slide as one 16:9 image; Lantern keeps them coherent, lets you edit and repaint, and exports to PowerPoint, PDF, or a zip of pictures. Everything lives on your own machine — a deck is just a folder.
 
@@ -14,6 +14,10 @@ Claude Haiku writes the outline and a style guide; Gemini's Nano Banana Pro pain
 
 - Once: copy `.env.example` to `.env` and add your two API keys (the comments in the file say exactly where to get them). Then `python -m venv .venv`, `.venv\Scripts\pip install -r requirements.txt`, and inside `dashboard/`: `npm install && npm run build`.
 - Every day: double-click `start-lantern.cmd` (or let Task Scheduler do it — see `RUNBOOK.md`), then open **http://localhost:8020**.
+
+## The Chalk tab — chat with Projects
+
+Click **Chalk — chat** in the header (or go to `/chalk`). A *project* holds instructions (how the assistant should behave) and pasted knowledge (a syllabus, a pacing guide); every chat inside that project carries both automatically. Conversations stream live, render markdown, and export to clean `.md` transcripts. The model dropdown offers **Claude Haiku 4.5** (the default — fast and cheap) plus **Gemini Flash/Pro (latest)**, using the same two API keys the deck side already has. Enter sends, Shift+Enter makes a new line, Esc stops a reply mid-stream (the partial is kept). Chat history lives in one file, `data/chalk.db` — copy it and you've backed it up. Fonts are bundled with the app, so nothing needs the open internet except the model calls themselves.
 
 ## Honest answers to fair questions
 

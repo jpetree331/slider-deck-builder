@@ -3,16 +3,18 @@ import LibraryPage from './pages/LibraryPage'
 import NewDeckPage from './pages/NewDeckPage'
 import OutlinePage from './pages/OutlinePage'
 import DeckPage from './pages/DeckPage'
+import ChalkPage from './pages/ChalkPage'
 
 export default function App() {
   const location = useLocation()
-  // DeckPage owns the whole viewport in present mode — no shell chrome there.
-  const bare = /^\/decks\/[^/]+$/.test(location.pathname)
+  // DeckPage (present mode) and ChalkPage own the whole viewport — no shell.
+  const bare = /^\/decks\/[^/]+$/.test(location.pathname) || location.pathname === '/chalk'
 
   if (bare) {
     return (
       <Routes>
         <Route path="/decks/:id" element={<DeckPage />} />
+        <Route path="/chalk" element={<ChalkPage />} />
       </Routes>
     )
   }
@@ -23,9 +25,14 @@ export default function App() {
         <Link to="/" className="wordmark">
           Lantern<span className="ember">.</span>
         </Link>
-        <Link to="/new">
-          <button className="primary">New deck</button>
-        </Link>
+        <span className="topbar-actions">
+          <Link to="/chalk">
+            <button className="ghost">Chalk — chat</button>
+          </Link>
+          <Link to="/new">
+            <button className="primary">New deck</button>
+          </Link>
+        </span>
       </header>
       <Routes>
         <Route path="/" element={<LibraryPage />} />

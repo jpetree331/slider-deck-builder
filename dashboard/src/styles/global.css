@@ -139,6 +139,12 @@ textarea {
   color: var(--accent);
 }
 
+.topbar-actions {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+}
+
 /* shared empty/loading/error states */
 .state-note {
   text-align: center;

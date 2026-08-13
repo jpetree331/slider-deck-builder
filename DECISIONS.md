@@ -2,6 +2,18 @@
 
 Reverse-chronological. Records reversals too.
 
+## 2026-08-13 · Chalk · Consolidated into Lantern as the /chalk tab
+Chalk (`chalk_master_plan.md`) shares Lantern's chassis by design — same FastAPI + built-Vite shape, same fonts/tokens, same port claims. One app resolves the 8020/5179 collision. Owner call: dropdown = Haiku (default) + Gemini models instead of the plan's Sonnet, since both keys already live in `.env`. Routes namespaced `/api/chalk/*` (diverges from the plan's bare `/api/projects` to avoid colliding with deck routes).
+
+## 2026-08-13 · Chalk · SQLite arrives — for chat only
+`data/chalk.db` per Chalk's own locked decision (stdlib `sqlite3`, no ORM, no new deps). NOT a reversal of Lantern's "filesystem, not Postgres" — decks stay folders; conversation data is append-heavy and relational, and one `.db` file rides the same zip backup.
+
+## 2026-08-13 · Chalk · Fonts self-hosted via @fontsource, Google CDN links removed
+Chalk's zero-CDN rule, applied app-wide: the whole UI now renders correctly on filtered school networks and offline. Strictly better for the deck side too.
+
+## 2026-08-13 · Chalk · SSE for chat; polling stays for renders
+Lantern's "polling, not SSE" locked decision was scoped to render progress and stands. Chat streams over SSE-on-POST per Chalk's locked decision. Two transports, two features, both loud here.
+
 ## 2026-08-12 · S6 · Task Scheduler registration deferred to deployment
 The build machine is not the deployment target; the registration steps are complete in RUNBOOK.md and take two minutes on the real host. Not a reversal of Locked Decision — the `.cmd` + Scheduler design stands.
 

@@ -1,0 +1,202 @@
+.chat-pane {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.chat-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-5);
+  border-bottom: 1px solid var(--line);
+}
+
+.chat-title {
+  flex: 1;
+  font-family: var(--font-display);
+  font-size: 18px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chat-model {
+  max-width: 220px;
+}
+
+.chat-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.bubble {
+  max-width: 760px;
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.bubble.user {
+  align-self: flex-end;
+  background: var(--accent-soft);
+  border: 1px solid var(--line);
+}
+
+.bubble.assistant {
+  align-self: flex-start;
+  background: var(--canvas-raised);
+  border: 1px solid var(--line);
+  white-space: normal;
+  position: relative;
+}
+
+.bubble.assistant .copy-btn {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  opacity: 0;
+  transition: opacity 0.15s var(--ease);
+}
+
+.bubble.assistant:hover .copy-btn {
+  opacity: 1;
+}
+
+.stream-raw {
+  margin: 0;
+  font-family: var(--font-ui);
+  font-size: 15px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.thinking {
+  color: var(--ink-faint);
+}
+
+/* markdown inside assistant bubbles — tokens only */
+.markdown > :first-child {
+  margin-top: 0;
+}
+
+.markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown h1,
+.markdown h2,
+.markdown h3 {
+  font-family: var(--font-display);
+  margin: var(--space-4) 0 var(--space-2);
+}
+
+.markdown h1 {
+  font-size: 20px;
+}
+
+.markdown h2 {
+  font-size: 17px;
+}
+
+.markdown h3 {
+  font-size: 15px;
+}
+
+.markdown p,
+.markdown ul,
+.markdown ol {
+  margin: var(--space-2) 0;
+}
+
+.markdown li {
+  margin: var(--space-1) 0;
+}
+
+.markdown code {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  background: var(--canvas);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0 4px;
+}
+
+.markdown pre {
+  background: var(--canvas);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3);
+  overflow-x: auto;
+}
+
+.markdown pre code {
+  border: none;
+  background: none;
+  padding: 0;
+}
+
+.markdown table {
+  border-collapse: collapse;
+  margin: var(--space-3) 0;
+  font-size: 14px;
+}
+
+.markdown th,
+.markdown td {
+  border: 1px solid var(--line-strong);
+  padding: var(--space-1) var(--space-3);
+  text-align: left;
+}
+
+.markdown th {
+  background: var(--canvas-overlay);
+}
+
+.markdown blockquote {
+  margin: var(--space-2) 0;
+  padding-left: var(--space-3);
+  border-left: 2px solid var(--accent);
+  color: var(--ink-dim);
+}
+
+.markdown a {
+  color: var(--accent-bright);
+  text-decoration: underline;
+}
+
+/* toast + composer */
+.chat-toast {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin: 0 var(--space-5);
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--err);
+  border-radius: var(--radius-sm);
+  color: var(--err);
+  background: var(--canvas-raised);
+}
+
+.chat-toast span {
+  flex: 1;
+}
+
+.chat-composer {
+  display: flex;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5) var(--space-5);
+  align-items: flex-end;
+}
+
+.chat-composer textarea {
+  flex: 1;
+  resize: none;
+}
