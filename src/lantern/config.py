@@ -21,6 +21,9 @@ PASSWORD = os.environ.get("LANTERN_PASSWORD", "")
 OUTLINE_MODEL = os.environ.get("LANTERN_OUTLINE_MODEL", "gemini-3.1-pro-preview")
 IMAGE_MODEL = os.environ.get("LANTERN_IMAGE_MODEL", "gemini-3-pro-image-preview")
 MAX_SLIDES = int(os.environ.get("LANTERN_MAX_SLIDES", "16"))
+# Per-attempt cap on Gemini calls (renders + outline). 180s default: logs
+# showed real 2K renders dying at exactly 120s when Google ran slow.
+RENDER_TIMEOUT_S = int(os.environ.get("LANTERN_RENDER_TIMEOUT", "180"))
 
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")

@@ -55,6 +55,7 @@ Every knob is documented inline in `.env.example` — keys, port, data dir, pass
 | Chat says "unreachable — check the network" | That provider's host is blocked or the connection dropped | On a filtered network, switch the dropdown to a model whose host is allowed; partial replies are kept |
 | Chalk tab missing after an update | Frontend rebuilt but service not restarted (or vice versa) | `npm run build` in `dashboard/`, then restart the service |
 | Attachment says "no readable text or images" | Scanned/image-only PDF with nothing extractable, or a password-protected file | Paste the text into source notes instead; unlock protected PDFs first |
+| Slides fail with "timeout after Ns" or "getaddrinfo failed"; outline says "unreachable" | Wi-Fi/DNS blip on this machine, or Google running slow (both hit generativelanguage.googleapis.com) | Wait a minute, hit **Render** — resume repaints only the missing slides. Both call types retry once automatically; raise `LANTERN_RENDER_TIMEOUT` in `.env` if slow-Google timeouts are frequent |
 | Images look stale after a repaint | Aggressive proxy cache | Hard refresh; image URLs are versioned by `rendered_at` and the API sends `no-cache` + ETag, so plain reloads always revalidate |
 
 ## Do-not-disturb inventory

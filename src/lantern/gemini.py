@@ -16,7 +16,7 @@ logger = logging.getLogger("lantern.gemini")
 
 ENDPOINT = ("https://generativelanguage.googleapis.com/v1beta/models/"
             "{model}:generateContent")
-TIMEOUT_S = 120
+TIMEOUT_S = config.RENDER_TIMEOUT_S
 
 # Plan-time pricing for gemini-3-pro-image-preview (USD per image).
 COST_PER_IMAGE_USD = {"1K": 0.134, "2K": 0.134, "4K": 0.24}
@@ -80,12 +80,19 @@ def generate_text(model: str, system: str, contents: list,
     if system:
         body["systemInstruction"] = {"parts": [{"text": system}]}
     url = ENDPOINT.format(model=model)
-    try:
-        resp = httpx.post(url, json=body,
-                          headers={"x-goog-api-key": config.GEMINI_API_KEY},
-                          timeout=TIMEOUT_S)
-    except httpx.TransportError as e:
-        raise GeminiError(f"generativelanguage.googleapis.com unreachable — {e}")
+    resp = None
+    for attempt in (1, 2):
+        try:
+            resp = httpx.post(url, json=body,
+                              headers={"x-goog-api-key": config.GEMINI_API_KEY},
+                              timeout=TIMEOUT_S)
+            break
+        except httpx.TransportError as e:
+            if attempt == 2:
+                raise GeminiError("generativelanguage.googleapis.com "
+                                  f"unreachable — {e}")
+            logger.warning("gemini text attempt failed (%s) — one retry in 3s", e)
+            time.sleep(3)
     if resp.status_code >= 400:
         raise GeminiError(f"Gemini {model} error HTTP {resp.status_code}: "
                           f"{resp.text[:300]}")
@@ -116,6 +123,9 @@ def render_image(prompt: str, size: str, style_ref_png: bytes | None = None) -> 
                               timeout=TIMEOUT_S)
         except httpx.TimeoutException:
             last_error = f"timeout after {TIMEOUT_S}s"
+        except httpx.TransportError as e:
+            # DNS blips (getaddrinfo) and dropped sockets deserve the retry too
+            last_error = f"connection failed ({e})"
         else:
             if resp.status_code < 400:
                 return _extract_image(resp.json())
