@@ -35,11 +35,14 @@ class RenderError(GeminiError):
 def _request_body(prompt: str, size: str, style_ref_png: bytes | None) -> dict:
     parts = []
     if style_ref_png:
+        # bounded copy — same reasoning as nanogpt.py: refs are guides, and
+        # full-res PNGs waste upload time and vision tokens on every slide
+        ref = image_models.shrink_style_ref(style_ref_png)
         parts.append({"inline_data": {
             # actual byte format, not the filename's claim — Google sniffs
             # today, but a truthful label costs nothing
-            "mime_type": image_models.sniff_mime(style_ref_png),
-            "data": base64.b64encode(style_ref_png).decode("ascii"),
+            "mime_type": image_models.sniff_mime(ref),
+            "data": base64.b64encode(ref).decode("ascii"),
         }})
         parts.append({"text": REF_INSTRUCTION})
     parts.append({"text": prompt})

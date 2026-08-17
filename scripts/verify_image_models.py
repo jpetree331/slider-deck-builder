@@ -193,7 +193,9 @@ check("request carries model/size/b64 format and the ref as a data url",
       calls[-1]["model"] == "seedream-v4.5"
       and calls[-1]["size"] == "4096x2304"
       and calls[-1]["response_format"] == "b64_json"
-      and calls[-1]["imageDataUrl"].startswith("data:image/png;base64,"))
+      # refs ship as bounded JPEG since 2026-08-17 — full-res PNGs 413'd at
+      # NanoGPT's request-size cap (see verify_render's payload-cap checks)
+      and calls[-1]["imageDataUrl"].startswith("data:image/jpeg;base64,"))
 check("no ref -> no imageDataUrl key",
       (nanogpt.render_image("seedream-v4.5", "p", "auto"),
        "imageDataUrl" not in calls[-1])[1])
@@ -226,6 +228,21 @@ _sleep, nanogpt.time.sleep = nanogpt.time.sleep, lambda s: None
 nanogpt.httpx.post = _post_flaky
 png, _ = nanogpt.render_image("seedream-v4.5", "p", "auto")
 check("5xx retries once then succeeds", _attempts["n"] == 2 and png == PNG_1PX)
+
+_drops = {"n": 0}
+
+
+def _post_dropped(url, json=None, headers=None, timeout=None):
+    _drops["n"] += 1
+    if _drops["n"] == 1:
+        raise nanogpt.httpx.ConnectError("server disconnected (injected)")
+    return _post_ok(url, json=json, headers=headers, timeout=timeout)
+
+
+nanogpt.httpx.post = _post_dropped
+png, _ = nanogpt.render_image("seedream-v4.5", "p", "auto")
+check("dropped connection retries once then succeeds",
+      _drops["n"] == 2 and png == PNG_1PX)
 nanogpt.time.sleep = _sleep
 nanogpt.httpx.post = _real_post
 config.NANOGPT_API_KEY = _real_key

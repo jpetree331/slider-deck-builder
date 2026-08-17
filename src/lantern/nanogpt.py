@@ -18,7 +18,7 @@ import time
 import httpx
 
 from . import config
-from .image_models import sniff_mime
+from .image_models import shrink_style_ref, sniff_mime
 
 logger = logging.getLogger("lantern.nanogpt")
 
@@ -39,9 +39,11 @@ def _request_body(model: str, prompt: str, size: str,
     body = {"model": model, "prompt": prompt, "size": size,
             "response_format": "b64_json", "n": 1}
     if style_ref_png:
-        b64 = base64.b64encode(style_ref_png).decode("ascii")
+        # bounded copy — full-res PNG refs 413 at NanoGPT's request-size cap
+        ref = shrink_style_ref(style_ref_png)
+        b64 = base64.b64encode(ref).decode("ascii")
         # declare what the bytes ARE — NanoGPT's decoder trusts this label
-        body["imageDataUrl"] = f"data:{sniff_mime(style_ref_png)};base64,{b64}"
+        body["imageDataUrl"] = f"data:{sniff_mime(ref)};base64,{b64}"
     return body
 
 
@@ -84,7 +86,9 @@ def render_image(model: str, prompt: str, size: str,
         except httpx.TimeoutException:
             last_error = f"timeout after {TIMEOUT_S}s"
         except httpx.TransportError as e:
-            raise RenderError(f"nano-gpt.com unreachable — {e}")
+            # dropped sockets/DNS blips deserve the retry — same lesson
+            # gemini.py learned on 2026-08-14
+            last_error = f"nano-gpt.com connection failed ({e})"
         else:
             if resp.status_code < 400:
                 data = resp.json()

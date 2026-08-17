@@ -85,7 +85,9 @@ body = gemini._request_body("x", "2K", None)
 check("aspectRatio 16:9 in body",
       body["generationConfig"]["imageConfig"]["aspectRatio"] == "16:9")
 check("imageSize plumbed", body["generationConfig"]["imageConfig"]["imageSize"] == "2K")
-ref_body = gemini._request_body("x", "2K", b"pngbytes")
+_tiny = io.BytesIO()
+Image.new("RGB", (16, 9), "#101418").save(_tiny, "PNG")
+ref_body = gemini._request_body("x", "2K", _tiny.getvalue())
 check("style ref becomes leading inline_data part",
       "inline_data" in ref_body["contents"][0]["parts"][0])
 check("ref instruction present",
@@ -232,6 +234,29 @@ g_body = gemini._request_body("p", "2K", FIXTURE_JPEG)
 check("gemini inline_data declares the actual byte format",
       g_body["contents"][0]["parts"][0]["inline_data"]["mime_type"]
       == "image/jpeg")
+
+print("verify_render: style refs stay under provider payload caps")
+from src.lantern.image_models import shrink_style_ref  # noqa: E402
+
+big_buf = io.BytesIO()
+Image.frombytes("RGB", (2400, 1350), os.urandom(2400 * 1350 * 3)).save(
+    big_buf, "PNG")
+BIG_PNG = big_buf.getvalue()  # noise = incompressible, like a painted slide
+check("fixture is genuinely over NanoGPT's ~4.5MB cap",
+      len(BIG_PNG) > 4_500_000)
+shrunk = shrink_style_ref(BIG_PNG)
+check("shrunk ref is a bounded JPEG",
+      len(shrunk) < 1_000_000 and sniff_mime(shrunk) == "image/jpeg")
+shrunk_img = Image.open(io.BytesIO(shrunk))
+check("shrunk ref keeps the aspect, capped at 1536",
+      max(shrunk_img.size) == 1536
+      and abs(shrunk_img.width / shrunk_img.height - 2400 / 1350) < 0.01)
+ng_big = nanogpt._request_body("m", "p", "16:9", BIG_PNG)
+check("nanogpt payload bounded for full-res refs",
+      len(ng_big["imageDataUrl"]) < 1_500_000)
+g_big = gemini._request_body("p", "2K", BIG_PNG)
+check("gemini payload bounded for full-res refs",
+      len(g_big["contents"][0]["parts"][0]["inline_data"]["data"]) < 1_500_000)
 
 if "--live" in sys.argv:
     if os.environ.get("GEMINI_API_KEY"):

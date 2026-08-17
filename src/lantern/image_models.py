@@ -92,6 +92,27 @@ def sniff_mime(data: bytes) -> str:
     return "image/png"  # least-wrong default for unknown magic
 
 
+def shrink_style_ref(data: bytes, max_side: int = 1536,
+                     quality: int = 85) -> bytes:
+    """A style reference is a guide, not a print asset. Full-res PNG refs
+    (8-15 MB once painters' output is stored as true PNG) blow past
+    NanoGPT's ~4.5 MB request cap (413 FUNCTION_PAYLOAD_TOO_LARGE) and slow
+    every anchored paint on any provider. A bounded JPEG keeps the look and
+    lands well under 1 MB; the full-res slide on disk is untouched."""
+    import io
+
+    from PIL import Image  # deferred — keeps module import dependency-light
+    img = Image.open(io.BytesIO(data))
+    img.load()
+    if max(img.size) > max_side:
+        img.thumbnail((max_side, max_side))
+    if img.mode not in ("RGB", "L"):
+        img = img.convert("RGB")
+    out = io.BytesIO()
+    img.save(out, "JPEG", quality=quality)
+    return out.getvalue()
+
+
 def estimate_deck_cost(slide_count: int, size: str, image_model_id: str) -> float:
     """Exact plan-time total: slide 1 paints unanchored, slides 2+ carry the
     style ref (the queue guarantees that order), so FLUX-paired decks price
