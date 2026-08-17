@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { cancelRender, exportDeck, getDeck, patchDeck, renderDeck, renderSlide, slideImageUrl } from '../lib/api'
 import type { ExportFormat, SlidePatchPayload } from '../lib/api'
-import { COST_PER_IMAGE_USD, formatUsd } from '../lib/cost'
+import { estimateSlideCost, formatUsd } from '../lib/cost'
 import type { Deck, Slide } from '../lib/types'
 import './DeckPage.css'
 
@@ -68,7 +68,14 @@ export default function DeckPage() {
   if (error) return <div className="state-note error">{error}</div>
   if (!deck) return <div className="state-note">Opening the deck…</div>
 
-  const estimate = notDone * COST_PER_IMAGE_USD[deck.slide_size]
+  // exact, not flat: slide 1 paints unanchored, later slides carry the style
+  // ref (and may route through a painter's edit twin at its own price)
+  const estimate = deck.slides
+    .filter((s) => s.render?.status !== 'done')
+    .reduce(
+      (sum, s) => sum + estimateSlideCost(deck.image_model, deck.slide_size, s.n !== 1),
+      0,
+    )
   const anyDone = deck.slides.some((s) => s.render?.status === 'done')
 
   if (mode === 'present')

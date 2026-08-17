@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { createDeck, extractFile } from '../lib/api'
 import type { AttachedImage } from '../lib/api'
+import { DEFAULT_IMAGE_MODEL, IMAGE_MODELS } from '../config/imageModels'
 import type { SlideSize } from '../lib/types'
 import './NewDeckPage.css'
 
@@ -14,6 +15,7 @@ export default function NewDeckPage() {
   const [slideCount, setSlideCount] = useState('')
   const [styleHints, setStyleHints] = useState('')
   const [size, setSize] = useState<SlideSize>('2K')
+  const [imageModel, setImageModel] = useState(DEFAULT_IMAGE_MODEL)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [extracting, setExtracting] = useState<string | null>(null)
@@ -63,6 +65,7 @@ export default function NewDeckPage() {
         slide_count: slideCount ? Number(slideCount) : null,
         style_hints: styleHints,
         slide_size: size,
+        image_model: imageModel,
         images: images.length ? images : undefined,
       })
       navigate(`/decks/${deck.id}/outline`)
@@ -168,6 +171,16 @@ export default function NewDeckPage() {
             <option value="1K">1K — draft</option>
             <option value="2K">2K — default</option>
             <option value="4K">4K — print (≈2× cost)</option>
+          </select>
+        </label>
+        <label>
+          Painter
+          <select value={imageModel} onChange={(e) => setImageModel(e.target.value)}>
+            {IMAGE_MODELS.map((m) => (
+              <option key={m.id} value={m.id} title={m.note}>
+                {m.label}
+              </option>
+            ))}
           </select>
         </label>
       </div>

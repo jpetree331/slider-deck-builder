@@ -42,6 +42,7 @@ export interface Deck {
   source_notes: string // optional pasted content, verbatim
   style_guide: StyleGuide
   slide_size: SlideSize
+  image_model: string // an id from config/imageModels.ts — the deck's painter
   aspect_ratio: '16:9'
   status: DeckStatus
   slides: Slide[]

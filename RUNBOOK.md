@@ -4,7 +4,7 @@
 
 | Port | What | Notes |
 |---|---|---|
-| 8020 | Lantern FastAPI service | claimed — 8000/8001/8002/8005/8007/8010 belong to other services |
+| 8021 | Lantern FastAPI service | on this machine: 8020 is held by Docker Desktop, so `.env` pins `LANTERN_PORT=8021` (8000/8001/8002/8005/8007/8010 belong to other services) |
 | 5179 | Vite dev server | dev only; 5173/5174/5178 belong to other frontends |
 
 ## Start / stop / restart
@@ -33,6 +33,10 @@ Every knob is documented inline in `.env.example` — keys, port, data dir, pass
 
 - Chat data is ONE file: `data/chalk.db` (SQLite). Back it up by copying it — it rides the same zip ritual as the deck folders. Deletes in the UI are soft (tombstones); the rows stay in the file.
 - The model dropdown lives in `dashboard/src/config/models.ts`, mirrored by the allowlist in `src/lantern/chalk_chat.py` — to add a model, edit BOTH, then `npm run build` and restart. `verify_chalk.py` fails if they drift.
+
+## Painters (the deck image-model dropdown)
+
+- The Painter list lives in `dashboard/src/config/imageModels.ts`, mirrored (ids AND prices) by `src/lantern/image_models.py` — to add a painter, edit BOTH, then `npm run build` and restart. `verify_image_models.py` fails if they drift, and also checks the prices against NanoGPT's live catalog on every run.
 - Log lines carry ids, timings, and token counts — never message text (it's a school laptop).
 
 ## Logs
@@ -52,10 +56,11 @@ Every knob is documented inline in `.env.example` — keys, port, data dir, pass
 | Everything 401s from a phone over Tailscale | Password set, phone browser cached bad credentials | Reopen the site, re-enter; or use an incognito tab |
 | Deck folder exists but the library shows nothing / skips it | Corrupt `deck.json` (the log says "skipping unreadable deck folder") | The PNGs are safe. Restore `deck.json` from a backup zip, or rebuild it by hand from the schema in `BUILD_BRIEF.md` |
 | Chat says "API key rejected" | Wrong or expired key for that provider | Fix `ANTHROPIC_API_KEY` (Claude models) or `GEMINI_API_KEY` (Gemini models) in `.env`, restart |
+| Slide says "NanoGPT API key rejected" | Deck's Painter is a NanoGPT model and `NANOGPT_API_KEY` is missing/wrong | Fix the key in `.env`, restart, hit Render — or switch the deck's Painter back to the Gemini default |
+| Slide says "NanoGPT balance too low to paint" | Pay-as-you-go balance ran dry mid-deck | Top up at nano-gpt.com, hit Render — only unpainted slides re-render |
 | Chat says "unreachable — check the network" | That provider's host is blocked or the connection dropped | On a filtered network, switch the dropdown to a model whose host is allowed; partial replies are kept |
 | Chalk tab missing after an update | Frontend rebuilt but service not restarted (or vice versa) | `npm run build` in `dashboard/`, then restart the service |
 | Attachment says "no readable text or images" | Scanned/image-only PDF with nothing extractable, or a password-protected file | Paste the text into source notes instead; unlock protected PDFs first |
-| Slides fail with "timeout after Ns" or "getaddrinfo failed"; outline says "unreachable" | Wi-Fi/DNS blip on this machine, or Google running slow (both hit generativelanguage.googleapis.com) | Wait a minute, hit **Render** — resume repaints only the missing slides. Both call types retry once automatically; raise `LANTERN_RENDER_TIMEOUT` in `.env` if slow-Google timeouts are frequent |
 | Images look stale after a repaint | Aggressive proxy cache | Hard refresh; image URLs are versioned by `rendered_at` and the API sends `no-cache` + ETag, so plain reloads always revalidate |
 
 ## Do-not-disturb inventory

@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { getDeck, patchDeck, renderDeck } from '../lib/api'
 import type { SlidePatchPayload } from '../lib/api'
 import { estimateDeckCost, formatUsd } from '../lib/cost'
+import { DEFAULT_IMAGE_MODEL, IMAGE_MODELS } from '../config/imageModels'
 import type { SlideSize, StyleGuide } from '../lib/types'
 import './OutlinePage.css'
 
@@ -24,6 +25,7 @@ export default function OutlinePage() {
   const [style, setStyle] = useState<StyleGuide | null>(null)
   const [slides, setSlides] = useState<EditSlide[]>([])
   const [size, setSize] = useState<SlideSize>('2K')
+  const [imageModel, setImageModel] = useState(DEFAULT_IMAGE_MODEL)
   const [isLoaded, setIsLoaded] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty'>('saved')
@@ -36,6 +38,7 @@ export default function OutlinePage() {
         setTitle(deck.title)
         setStyle(deck.style_guide)
         setSize(deck.slide_size)
+        setImageModel(deck.image_model)
         setSlides(
           deck.slides.map((s) => ({
             origN: s.n,
@@ -73,7 +76,13 @@ export default function OutlinePage() {
       visual_description: s.visual_description,
       layout_hint: s.layout_hint,
     }))
-    patchDeck(id, { title, style_guide: style, slides: payload, slide_size: size }).then(
+    patchDeck(id, {
+      title,
+      style_guide: style,
+      slides: payload,
+      slide_size: size,
+      image_model: imageModel,
+    }).then(
       (deck) => {
         // server renumbered contiguously in our order — refresh identities,
         // but return the SAME array when nothing changed: a new reference
@@ -97,7 +106,7 @@ export default function OutlinePage() {
         setSaveState('dirty')
       },
     )
-  }, [id, title, style, slides, size])
+  }, [id, title, style, slides, size, imageModel])
 
   // debounced autosave, gated on isLoaded
   useEffect(() => {
@@ -107,9 +116,12 @@ export default function OutlinePage() {
     timer.current = window.setTimeout(save, 800)
     return () => window.clearTimeout(timer.current)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [title, style, slides, size, isLoaded])
+  }, [title, style, slides, size, imageModel, isLoaded])
 
-  const cost = useMemo(() => estimateDeckCost(slides.length, size), [slides.length, size])
+  const cost = useMemo(
+    () => estimateDeckCost(slides.length, size, imageModel),
+    [slides.length, size, imageModel],
+  )
   const incomplete =
     !!style &&
     (!style.art_direction.trim() ||
@@ -228,6 +240,16 @@ export default function OutlinePage() {
               <option value="1K">1K — draft</option>
               <option value="2K">2K — default</option>
               <option value="4K">4K — print</option>
+            </select>
+          </label>
+          <label>
+            Painter
+            <select value={imageModel} onChange={(e) => setImageModel(e.target.value)}>
+              {IMAGE_MODELS.map((m) => (
+                <option key={m.id} value={m.id} title={m.note}>
+                  {m.label}
+                </option>
+              ))}
             </select>
           </label>
         </div>

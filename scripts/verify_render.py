@@ -22,7 +22,7 @@ os.environ["LANTERN_DATA_DIR"] = tempfile.mkdtemp(prefix="lantern-verify-")
 
 from PIL import Image  # noqa: E402
 
-from src.lantern import gemini, render_service, store  # noqa: E402
+from src.lantern import gemini, nanogpt, render_service, store  # noqa: E402
 from src.lantern.outline_schema import StyleGuide  # noqa: E402
 from src.lantern.prompts import compose_slide_prompt  # noqa: E402
 
@@ -152,6 +152,52 @@ check("boot sweep flips rendering → error: interrupted",
       and after["slides"][2]["render"]["error"] == "interrupted")
 
 render_service.gemini.render_image = real_render_image
+
+print("verify_render: nanogpt dispatch + FLUX edit-twin routing")
+flux_deck = store.create_deck(title="Flux fixture", topic="t", style_guide=STYLE,
+                              slides=[dict(s) for s in SLIDES],
+                              image_model="flux-2-klein-4b")
+check("deck stores its painter", flux_deck["image_model"] == "flux-2-klein-4b")
+ncaptured = {}
+real_nanogpt_render = nanogpt.render_image
+
+
+def nanogpt_stub(model, prompt, size, style_ref_png=None):
+    ncaptured["model"], ncaptured["size"], ncaptured["ref"] = model, size, style_ref_png
+    return FIXTURE_PNG, (0.0123 if style_ref_png else None)
+
+
+render_service.nanogpt.render_image = nanogpt_stub
+s1 = render_service.render_slide(flux_deck["id"], 1)
+check("slide 1 paints the base model at its 16:9 token",
+      ncaptured["model"] == "flux-2-klein-4b" and ncaptured["size"] == "1280*720"
+      and ncaptured["ref"] is None)
+check("slide 1 falls back to the table price when cost is unmetered",
+      s1["render"]["cost_estimate_usd"] == 0.0102
+      and s1["render"]["model"] == "flux-2-klein-4b")
+s2 = render_service.render_slide(flux_deck["id"], 2)
+check("slide 2 auto-routes to the edit twin with the ref riding along",
+      ncaptured["model"] == "wavespeed-ai/flux-2-klein-base-4b/edit"
+      and ncaptured["size"] == "auto" and ncaptured["ref"] == FIXTURE_PNG)
+check("slide 2 records the ACTUAL metered cost and the twin's id",
+      s2["render"]["cost_estimate_usd"] == 0.0123
+      and s2["render"]["model"] == "wavespeed-ai/flux-2-klein-base-4b/edit")
+
+
+def nanogpt_stub_fail(model, prompt, size, style_ref_png=None):
+    raise nanogpt.RenderError("balance too low (injected)")
+
+
+render_service.nanogpt.render_image = nanogpt_stub_fail
+try:
+    render_service.render_slide(flux_deck["id"], 3)
+    check("nanogpt failure propagates as nanogpt.RenderError", False)
+except nanogpt.RenderError:
+    check("nanogpt failure propagates as nanogpt.RenderError", True)
+check("nanogpt errors are in queue's catch tuple",
+      isinstance(nanogpt.RenderError("x"), render_service.RenderProviderError))
+render_service.nanogpt.render_image = real_nanogpt_render
+store.delete_deck(flux_deck["id"])
 
 if "--live" in sys.argv:
     if os.environ.get("GEMINI_API_KEY"):

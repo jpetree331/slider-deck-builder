@@ -16,7 +16,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-from . import config
+from . import config, image_models
 
 logger = logging.getLogger("lantern.store")
 
@@ -150,6 +150,11 @@ def sanitize_deck(raw, fallback_id: str = "") -> dict:
     slide_size = raw.get("slide_size")
     if slide_size not in SLIDE_SIZES:
         slide_size = "2K"
+    # pre-Painter decks have no field; unknown ids coerce to the default —
+    # this clamp IS the migration, same as slide_size's
+    image_model = raw.get("image_model")
+    if image_model not in image_models.IMAGE_MODELS:
+        image_model = image_models.DEFAULT_IMAGE_MODEL
     status = raw.get("status")
     if status not in DECK_STATUSES:
         status = "outline"
@@ -161,6 +166,7 @@ def sanitize_deck(raw, fallback_id: str = "") -> dict:
         "source_notes": _safe_str(raw.get("source_notes")),
         "style_guide": _sanitize_style_guide(raw.get("style_guide")),
         "slide_size": slide_size,
+        "image_model": image_model,
         "aspect_ratio": "16:9",
         "status": status,
         "slides": slides,
@@ -273,7 +279,8 @@ def patch_slides(deck_id: str, patches: list) -> dict:
 
 def create_deck(*, title: str, topic: str, source_notes: str = "",
                 style_guide: dict | None = None, slides: list | None = None,
-                slide_size: str = "2K") -> dict:
+                slide_size: str = "2K",
+                image_model: str = image_models.DEFAULT_IMAGE_MODEL) -> dict:
     deck_id = make_id("dk")
     now = _now()
     deck = sanitize_deck({
@@ -283,6 +290,7 @@ def create_deck(*, title: str, topic: str, source_notes: str = "",
         "source_notes": source_notes,
         "style_guide": style_guide or {},
         "slide_size": slide_size,
+        "image_model": image_model,
         "aspect_ratio": "16:9",
         "status": "outline",
         "slides": slides or [],

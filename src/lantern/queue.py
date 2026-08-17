@@ -14,7 +14,7 @@ import logging
 import threading
 from collections import deque
 
-from . import gemini, render_service, store
+from . import render_service, store
 
 logger = logging.getLogger("lantern.queue")
 
@@ -84,7 +84,8 @@ def _process(job: dict) -> None:
             render_service.render_slide(deck_id, n)
         except render_service.AlreadyRendering:
             logger.warning("slide %d of %s claimed elsewhere — skipping", n, deck_id)
-        except (gemini.RenderError, render_service.SlideNotFound,
+        # RenderProviderError is a tuple — unpack it; except() rejects nesting
+        except (*render_service.RenderProviderError, render_service.SlideNotFound,
                 store.StoreError) as e:
             logger.warning("deck %s halted at slide %d: %s", deck_id, n, e)
             halted = "error"

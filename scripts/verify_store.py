@@ -17,7 +17,7 @@ if hasattr(sys.stdout, "reconfigure"):
 _tmp = tempfile.mkdtemp(prefix="lantern-verify-")
 os.environ["LANTERN_DATA_DIR"] = _tmp  # must precede the config import
 
-from src.lantern import store  # noqa: E402
+from src.lantern import image_models, store  # noqa: E402
 
 FAILS = []
 
@@ -63,6 +63,16 @@ bad = store.sanitize_deck({
 })
 check("bad title coerced", bad["title"] == "Untitled deck")
 check("bad slide_size clamped to 2K", bad["slide_size"] == "2K")
+check("missing image_model coerced to the default painter (migration)",
+      bad["image_model"] == image_models.DEFAULT_IMAGE_MODEL)
+bad_model = store.sanitize_deck({"id": deck["id"], "title": "t",
+                                 "image_model": "dall-e-1917"})
+check("unknown image_model coerced to the default painter",
+      bad_model["image_model"] == image_models.DEFAULT_IMAGE_MODEL)
+kept_model = store.sanitize_deck({"id": deck["id"], "title": "t",
+                                  "image_model": "seedream-v4.5"})
+check("valid NanoGPT painter round-trips unchanged",
+      kept_model["image_model"] == "seedream-v4.5")
 check("bad status coerced to outline", bad["status"] == "outline")
 check("invalid palette falls back to default", bad["style_guide"]["palette"] == store.DEFAULT_PALETTE)
 check("malformed slides dropped, good one kept",

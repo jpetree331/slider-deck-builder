@@ -20,8 +20,8 @@ from starlette.staticfiles import StaticFiles
 
 from fastapi import File, UploadFile
 
-from . import (chalk_db, config, export, extract, outline, queue,
-               render_service, store)
+from . import (chalk_db, config, export, extract, image_models, outline,
+               queue, render_service, store)
 from .chalk_api import chalk_router
 from .outline_schema import MAX_POINT_WORDS, MAX_POINTS, validate_palette
 
@@ -95,12 +95,21 @@ class AttachedImage(BaseModel):
         return v
 
 
+def _image_model_known(v: str) -> str:
+    """Allowlist gate — the registry is data, so a validator, not a Literal."""
+    if v not in image_models.IMAGE_MODELS:
+        raise ValueError(f"unknown image model {v!r} "
+                         "(see dashboard/src/config/imageModels.ts)")
+    return v
+
+
 class CreateDeckRequest(BaseModel):
     topic: str
     source_notes: str = ""
     slide_count: int | None = None
     style_hints: str = ""
     slide_size: Literal["1K", "2K", "4K"] = "2K"
+    image_model: str = image_models.DEFAULT_IMAGE_MODEL
     images: list[AttachedImage] = []
 
     @field_validator("topic")
@@ -109,6 +118,11 @@ class CreateDeckRequest(BaseModel):
         if not v.strip():
             raise ValueError("topic must be non-empty")
         return v
+
+    @field_validator("image_model")
+    @classmethod
+    def image_model_valid(cls, v: str) -> str:
+        return _image_model_known(v)
 
     @field_validator("images")
     @classmethod
@@ -176,6 +190,12 @@ class PatchDeckRequest(BaseModel):
     style_guide: StyleGuidePatch | None = None
     slides: list[SlidePatch] | None = None
     slide_size: Literal["1K", "2K", "4K"] | None = None
+    image_model: str | None = None
+
+    @field_validator("image_model")
+    @classmethod
+    def image_model_valid(cls, v: str | None) -> str | None:
+        return v if v is None else _image_model_known(v)
 
 
 @api_router.post("/decks")
@@ -196,7 +216,7 @@ def create_deck(req: CreateDeckRequest):
         title=result.title, topic=req.topic, source_notes=req.source_notes,
         style_guide=result.style_guide.model_dump(),
         slides=[s.model_dump() for s in result.slides],
-        slide_size=req.slide_size)
+        slide_size=req.slide_size, image_model=req.image_model)
     return deck
 
 
@@ -229,6 +249,8 @@ def patch_deck(deck_id: str, req: PatchDeckRequest):
                 d["title"] = req.title.strip()
             if req.slide_size is not None:
                 d["slide_size"] = req.slide_size
+            if req.image_model is not None:
+                d["image_model"] = req.image_model
             if req.style_guide is not None:
                 for key, value in req.style_guide.model_dump(exclude_none=True).items():
                     d["style_guide"][key] = value

@@ -55,6 +55,7 @@ export interface CreateDeckPayload {
   slide_count?: number | null
   style_hints?: string
   slide_size?: SlideSize
+  image_model?: string // painter id from config/imageModels.ts
   images?: AttachedImage[] // ride to the one outline call, then discarded
 }
 
@@ -71,6 +72,7 @@ export interface PatchDeckPayload {
   style_guide?: Partial<StyleGuide>
   slides?: SlidePatchPayload[]
   slide_size?: SlideSize
+  image_model?: string // painter id from config/imageModels.ts
 }
 
 export function createDeck(payload: CreateDeckPayload): Promise<Deck> {

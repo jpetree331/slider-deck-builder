@@ -20,11 +20,11 @@ Every sprint runs RECON (read before writing), BUILD, VERIFY (do this, don't ski
 
 ## Sacred invariants (do NOT break these without flagging)
 
-1. `ANTHROPIC_API_KEY` and `GEMINI_API_KEY` exist only in the server `.env`. No client-side call to Anthropic or Google, ever.
+1. `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, and `NANOGPT_API_KEY` exist only in the server `.env`. No client-side call to Anthropic, Google, or NanoGPT, ever.
 2. All deck reads/writes go through `src/lantern/store.py`. Every `deck.json` write is atomic (write `deck.json.tmp`, then `os.replace`). No other module touches the deck folder layout.
 3. `src/lantern/prompts.py::compose_slide_prompt(style_guide, slide, n, total)` is the ONLY place a Gemini prompt is assembled, and it consumes **every** field of `style_guide`.
 4. Every render request pins `aspectRatio: "16:9"`. Never omitted.
-5. `dashboard/src/lib/` (TS) and `src/lantern/{store,prompts,outline_schema}.py` stay framework-free/pure — no React imports, no FastAPI imports — so verify scripts can exercise them headless. Say so in file headers.
+5. `dashboard/src/lib/` (TS) and `src/lantern/{store,prompts,outline_schema,image_models}.py` stay framework-free/pure — no React imports, no FastAPI imports — so verify scripts can exercise them headless. Say so in file headers.
 6. The user's own words survive: `topic` and `source_notes` are stored verbatim and quoted into the outline call; slide `title`/`points` text is rendered verbatim into images (Haiku writes it, Jess can edit it, Gemini paints exactly it).
 7. Exports are derived artifacts, rebuilt on demand from the PNGs — never a second source of truth.
 
@@ -60,6 +60,7 @@ data/decks/<deck_id>/
     "tone": "confident, museum-placard"
   },
   "slide_size": "2K",               // "1K" | "2K" | "4K"
+  "image_model": "gemini-3-pro-image-preview",  // a painter id from dashboard/src/config/imageModels.ts (2026-08-16)
   "aspect_ratio": "16:9",
   "status": "outline",              // outline | rendering | done | error
   "slides": [{
