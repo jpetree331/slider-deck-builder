@@ -71,7 +71,15 @@ def render_slide(deck_id: str, n: int) -> dict:
         else:
             png, actual_cost = nanogpt.render_image(resolved.id, prompt,
                                                     resolved.size, style_ref)
-        Image.open(io.BytesIO(png)).verify()  # corrupt bytes never land on disk
+        img = Image.open(io.BytesIO(png))
+        img.load()  # full decode — corrupt bytes never land on disk
+        if img.format != "PNG":
+            # painters return JPEG/WebP at will; slides/NN.png must BE png —
+            # the first consumer to trust the extension (NanoGPT refs) 413'd
+            out = io.BytesIO()
+            (img if img.mode in ("RGB", "RGBA", "L") else img.convert("RGB")
+             ).save(out, "PNG")
+            png = out.getvalue()
     except Exception as e:
         ms = int((time.monotonic() - t0) * 1000)
         with store.LOCK:

@@ -199,6 +199,40 @@ check("nanogpt errors are in queue's catch tuple",
 render_service.nanogpt.render_image = real_nanogpt_render
 store.delete_deck(flux_deck["id"])
 
+print("verify_render: format truth (painters return JPEG at will)")
+from src.lantern.image_models import sniff_mime  # noqa: E402
+
+jpeg_buf = io.BytesIO()
+Image.new("RGB", (160, 90), "#3AA6D9").save(jpeg_buf, "JPEG")
+FIXTURE_JPEG = jpeg_buf.getvalue()
+check("sniff_mime tells jpeg from png",
+      sniff_mime(FIXTURE_JPEG) == "image/jpeg"
+      and sniff_mime(FIXTURE_PNG) == "image/png")
+
+jpeg_deck = store.create_deck(title="J", topic="t", style_guide=STYLE,
+                              slides=[dict(s) for s in SLIDES])
+
+
+def stub_jpeg(prompt, size, style_ref_png=None):
+    return FIXTURE_JPEG
+
+
+render_service.gemini.render_image = stub_jpeg
+render_service.render_slide(jpeg_deck["id"], 1)
+disk = store.slide_image_path(jpeg_deck["id"], 1).read_bytes()
+check("JPEG from the painter lands on disk as real PNG",
+      disk[:8] == b"\x89PNG\r\n\x1a\n")
+render_service.gemini.render_image = real_render_image
+store.delete_deck(jpeg_deck["id"])
+
+ng_body = nanogpt._request_body("m", "p", "16:9", FIXTURE_JPEG)
+check("nanogpt data URL declares the actual byte format",
+      ng_body["imageDataUrl"].startswith("data:image/jpeg;base64,"))
+g_body = gemini._request_body("p", "2K", FIXTURE_JPEG)
+check("gemini inline_data declares the actual byte format",
+      g_body["contents"][0]["parts"][0]["inline_data"]["mime_type"]
+      == "image/jpeg")
+
 if "--live" in sys.argv:
     if os.environ.get("GEMINI_API_KEY"):
         print("verify_render: LIVE render of one slide (≈ $0.14)")

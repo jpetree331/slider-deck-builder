@@ -18,6 +18,7 @@ import time
 import httpx
 
 from . import config
+from .image_models import sniff_mime
 
 logger = logging.getLogger("lantern.nanogpt")
 
@@ -39,7 +40,8 @@ def _request_body(model: str, prompt: str, size: str,
             "response_format": "b64_json", "n": 1}
     if style_ref_png:
         b64 = base64.b64encode(style_ref_png).decode("ascii")
-        body["imageDataUrl"] = f"data:image/png;base64,{b64}"
+        # declare what the bytes ARE — NanoGPT's decoder trusts this label
+        body["imageDataUrl"] = f"data:{sniff_mime(style_ref_png)};base64,{b64}"
     return body
 
 

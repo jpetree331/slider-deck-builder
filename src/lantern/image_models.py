@@ -76,6 +76,22 @@ def resolve_model(image_model_id: str, size: str, has_ref: bool) -> ResolvedMode
                          entry["sizes"][size], entry["price_usd"][size])
 
 
+def sniff_mime(data: bytes) -> str:
+    """Actual image mime from magic bytes. Painters return JPEG/WebP at will
+    regardless of what we ask for; a data URL or inline part must declare
+    what the bytes ARE — decoders that trust the label (NanoGPT's does)
+    read garbage dimensions from a mislabeled payload and 413."""
+    if data[:8] == b"\x89PNG\r\n\x1a\n":
+        return "image/png"
+    if data[:3] == b"\xff\xd8\xff":
+        return "image/jpeg"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp"
+    if data[:6] in (b"GIF87a", b"GIF89a"):
+        return "image/gif"
+    return "image/png"  # least-wrong default for unknown magic
+
+
 def estimate_deck_cost(slide_count: int, size: str, image_model_id: str) -> float:
     """Exact plan-time total: slide 1 paints unanchored, slides 2+ carry the
     style ref (the queue guarantees that order), so FLUX-paired decks price

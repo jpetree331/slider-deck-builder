@@ -10,7 +10,7 @@ import time
 
 import httpx
 
-from . import config
+from . import config, image_models
 
 logger = logging.getLogger("lantern.gemini")
 
@@ -36,7 +36,9 @@ def _request_body(prompt: str, size: str, style_ref_png: bytes | None) -> dict:
     parts = []
     if style_ref_png:
         parts.append({"inline_data": {
-            "mime_type": "image/png",
+            # actual byte format, not the filename's claim — Google sniffs
+            # today, but a truthful label costs nothing
+            "mime_type": image_models.sniff_mime(style_ref_png),
             "data": base64.b64encode(style_ref_png).decode("ascii"),
         }})
         parts.append({"text": REF_INSTRUCTION})
