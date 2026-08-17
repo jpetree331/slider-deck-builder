@@ -139,8 +139,10 @@ export function exportDeck(
   return request(`/api/decks/${id}/export?fmt=${fmt}${partial}`, { method: 'POST' })
 }
 
-/** Image URL for a rendered slide; rendered_at busts the cache on repaint. */
+/** Image URL for a rendered slide; rendered_at busts the cache on repaint.
+ * Extension-less since 2026-08-17 — slides store the painter's honest format
+ * (jpg or png) and the response Content-Type carries the truth. */
 export function slideImageUrl(id: string, n: number, renderedAt: string | null): string {
   const v = renderedAt ? `?v=${encodeURIComponent(renderedAt)}` : ''
-  return `/api/decks/${id}/slides/${n}.png${v}`
+  return `/api/decks/${id}/slides/${n}/image${v}`
 }

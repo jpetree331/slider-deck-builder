@@ -55,8 +55,8 @@ def render_slide(deck_id: str, n: int) -> dict:
     # 2. slide 1 is the style anchor: attach its PNG for n>1 when it exists
     style_ref = None
     if n > 1:
-        anchor = store.slide_image_path(deck_id, 1)
-        if anchor.exists():
+        anchor = store.find_slide_image(deck_id, 1)
+        if anchor is not None:
             style_ref = anchor.read_bytes()
 
     # 3. paint (no lock held), validate, write atomically. resolve_model picks
@@ -73,13 +73,20 @@ def render_slide(deck_id: str, n: int) -> dict:
                                                     resolved.size, style_ref)
         img = Image.open(io.BytesIO(png))
         img.load()  # full decode — corrupt bytes never land on disk
-        if img.format != "PNG":
-            # painters return JPEG/WebP at will; slides/NN.png must BE png —
-            # the first consumer to trust the extension (NanoGPT refs) 413'd
+        # store the painter's honest format: JPEG stays JPEG (PNG-wrapping it
+        # quintupled deck weight for zero quality gain — 2026-08-17), PNG
+        # stays PNG, anything exotic (WebP/GIF) transcodes to PNG so exports
+        # and PowerPoint never meet a format they can't embed
+        if img.format == "JPEG":
+            ext = "jpg"
+        elif img.format == "PNG":
+            ext = "png"
+        else:
             out = io.BytesIO()
             (img if img.mode in ("RGB", "RGBA", "L") else img.convert("RGB")
              ).save(out, "PNG")
             png = out.getvalue()
+            ext = "png"
     except Exception as e:
         ms = int((time.monotonic() - t0) * 1000)
         with store.LOCK:
@@ -99,11 +106,17 @@ def render_slide(deck_id: str, n: int) -> dict:
         raise gemini.RenderError(f"render pipeline failure: {e}") from e
 
     ms = int((time.monotonic() - t0) * 1000)
-    path = store.slide_image_path(deck_id, n)
+    path = store.slide_image_path(deck_id, n, ext)
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".png.tmp")
+    tmp = path.with_name(path.name + ".tmp")
     tmp.write_bytes(png)
     store.atomic_replace(tmp, path)  # retry-hardened for Windows readers
+    # a repaint may switch formats — never leave both 01.jpg and 01.png
+    for other_ext in store.SLIDE_IMAGE_EXTS:
+        if other_ext != ext:
+            stale = store.slide_image_path(deck_id, n, other_ext)
+            if stale.exists():
+                stale.unlink()
 
     # 4. record the full render block — the model that ACTUALLY painted (edit
     # twin included) and the metered cost when the provider reported one
@@ -113,7 +126,7 @@ def render_slide(deck_id: str, n: int) -> dict:
         slide = _find_slide(deck, n)
         slide["render"] = {
             "status": "done",
-            "image": f"slides/{store.slide_image_name(n)}",
+            "image": f"slides/{store.slide_image_name(n, ext)}",
             "prompt": prompt,
             "model": resolved.id,
             "ms": ms,

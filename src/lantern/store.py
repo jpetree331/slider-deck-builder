@@ -68,12 +68,28 @@ def exports_dir(deck_id: str) -> Path:
     return deck_dir(deck_id) / "exports"
 
 
-def slide_image_name(n: int) -> str:
-    return f"{int(n):02d}.png"
+# Slides store the painter's honest format (2026-08-17, see DECISIONS.md):
+# painters generate JPEG almost always, and transcoding to PNG quintupled
+# deck weight for zero quality gain. Position == filename still holds;
+# only the extension varies.
+SLIDE_IMAGE_EXTS = ("png", "jpg")
 
 
-def slide_image_path(deck_id: str, n: int) -> Path:
-    return slides_dir(deck_id) / slide_image_name(n)
+def slide_image_name(n: int, ext: str = "png") -> str:
+    return f"{int(n):02d}.{ext}"
+
+
+def slide_image_path(deck_id: str, n: int, ext: str = "png") -> Path:
+    return slides_dir(deck_id) / slide_image_name(n, ext)
+
+
+def find_slide_image(deck_id: str, n: int) -> Path | None:
+    """The slide's image on disk, whatever honest extension it carries."""
+    for ext in SLIDE_IMAGE_EXTS:
+        path = slides_dir(deck_id) / slide_image_name(n, ext)
+        if path.exists():
+            return path
+    return None
 
 
 # ── sanitizers ──────────────────────────────────────────────────────────────
@@ -240,7 +256,10 @@ def apply_slide_patches(deck: dict, patches: list) -> tuple[dict, list]:
             if slide["render"] and old["n"] != n:
                 moves.append((old["n"], n))
                 if slide["render"].get("image"):
-                    slide["render"]["image"] = f"slides/{slide_image_name(n)}"
+                    # re-key the position, keep the file's honest extension
+                    old_name = slide["render"]["image"].rpartition("/")[2]
+                    ext = old_name.rpartition(".")[2] or "png"
+                    slide["render"]["image"] = f"slides/{slide_image_name(n, ext)}"
         new_slides.append(slide)
     deck["slides"] = new_slides
     return deck, moves
@@ -253,25 +272,28 @@ def patch_slides(deck_id: str, patches: list) -> dict:
         deck = load_deck(deck_id)
         deck, moves = apply_slide_patches(deck, patches)
         sdir = slides_dir(deck_id)
-        # two-phase rename so swaps can't collide
+        # two-phase rename so swaps can't collide; extension travels with file
         staged = []
         for old_n, new_n in moves:
-            src = sdir / slide_image_name(old_n)
-            if src.exists():
+            src = find_slide_image(deck_id, old_n)
+            if src is not None:
+                ext = src.suffix.lstrip(".")
                 tmp = sdir / f"move-{new_n:02d}.tmp"
                 atomic_replace(src, tmp)
-                staged.append((tmp, sdir / slide_image_name(new_n)))
+                staged.append((tmp, sdir / slide_image_name(new_n, ext)))
         for tmp, dst in staged:
             atomic_replace(tmp, dst)
-        # remove PNGs no slide claims any more (deleted or content-edited slides)
+        # remove images no slide claims any more (deleted or content-edited)
         claimed = {s["render"]["image"].rpartition("/")[2]
                    for s in deck["slides"]
                    if s["render"] and s["render"].get("image")}
         if sdir.exists():
-            for png in sdir.glob("*.png"):
-                if png.name not in claimed:
-                    png.unlink()
-                    logger.info("removed orphan %s from deck %s", png.name, deck_id)
+            for ext in SLIDE_IMAGE_EXTS:
+                for image in sdir.glob(f"*.{ext}"):
+                    if image.name not in claimed:
+                        image.unlink()
+                        logger.info("removed orphan %s from deck %s",
+                                    image.name, deck_id)
         return save_deck(deck)
 
 
@@ -348,21 +370,21 @@ def list_decks() -> list:
         except StoreError:
             logger.warning("skipping unreadable deck folder %s in listing", entry.name)
             continue
-        cover = slide_image_path(deck["id"], 1)
+        cover = find_slide_image(deck["id"], 1)
         out.append({
             "id": deck["id"],
             "title": deck["title"],
             "status": deck["status"],
             "slide_count": len(deck["slides"]),
             "updated_at": deck["updated_at"],
-            "cover": f"slides/{slide_image_name(1)}" if cover.exists() else None,
+            "cover": f"slides/{cover.name}" if cover is not None else None,
         })
     out.sort(key=lambda d: d["updated_at"], reverse=True)
     return out
 
 
 def duplicate_deck(deck_id: str) -> dict:
-    """Deep copy under a fresh id: deck.json + slide PNGs. exports/ stays
+    """Deep copy under a fresh id: deck.json + slide images. exports/ stays
     empty — exports are derived artifacts, rebuilt on demand (invariant 7)."""
     with LOCK:
         deck = load_deck(deck_id)
@@ -372,8 +394,9 @@ def duplicate_deck(deck_id: str) -> dict:
         (dst / "exports").mkdir(parents=True, exist_ok=True)
         src_slides = slides_dir(deck_id)
         if src_slides.exists():
-            for png in src_slides.glob("*.png"):
-                (dst / "slides" / png.name).write_bytes(png.read_bytes())
+            for ext in SLIDE_IMAGE_EXTS:
+                for image in src_slides.glob(f"*.{ext}"):
+                    (dst / "slides" / image.name).write_bytes(image.read_bytes())
         deck["id"] = new_id
         deck["title"] = f"{deck['title']} (copy)"
         now = _now()

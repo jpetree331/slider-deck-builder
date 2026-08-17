@@ -221,9 +221,40 @@ def stub_jpeg(prompt, size, style_ref_png=None):
 
 render_service.gemini.render_image = stub_jpeg
 render_service.render_slide(jpeg_deck["id"], 1)
-disk = store.slide_image_path(jpeg_deck["id"], 1).read_bytes()
-check("JPEG from the painter lands on disk as real PNG",
-      disk[:8] == b"\x89PNG\r\n\x1a\n")
+jpath = store.find_slide_image(jpeg_deck["id"], 1)
+check("JPEG from the painter stays JPEG, stored as 01.jpg",
+      jpath is not None and jpath.name == "01.jpg"
+      and jpath.read_bytes()[:3] == b"\xff\xd8\xff")
+check("render block records the honest path",
+      store.load_deck(jpeg_deck["id"])["slides"][0]["render"]["image"]
+      == "slides/01.jpg")
+
+
+def stub_png_again(prompt, size, style_ref_png=None):
+    return FIXTURE_PNG
+
+
+render_service.gemini.render_image = stub_png_again
+render_service.render_slide(jpeg_deck["id"], 1)
+switched = store.find_slide_image(jpeg_deck["id"], 1)
+check("format-switching repaint leaves exactly one file",
+      switched is not None and switched.name == "01.png"
+      and not store.slide_image_path(jpeg_deck["id"], 1, "jpg").exists())
+
+webp_buf = io.BytesIO()
+Image.new("RGB", (160, 90), "#86A97F").save(webp_buf, "WEBP")
+
+
+def stub_webp(prompt, size, style_ref_png=None):
+    return webp_buf.getvalue()
+
+
+render_service.gemini.render_image = stub_webp
+render_service.render_slide(jpeg_deck["id"], 2)
+wpath = store.find_slide_image(jpeg_deck["id"], 2)
+check("exotic formats (WebP) transcode to real PNG",
+      wpath is not None and wpath.name == "02.png"
+      and wpath.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n")
 render_service.gemini.render_image = real_render_image
 store.delete_deck(jpeg_deck["id"])
 

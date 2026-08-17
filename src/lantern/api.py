@@ -332,11 +332,15 @@ def download_export(deck_id: str, filename: str):
                              f'attachment; filename="{filename}"'})
 
 
+# /slides/{n}/image since 2026-08-17: slides store the painter's honest
+# format (jpg or png), so the URL no longer claims an extension; the
+# Content-Type header carries the truth. {n}.png stays as a legacy alias.
+@api_router.get("/decks/{deck_id}/slides/{n}/image")
 @api_router.get("/decks/{deck_id}/slides/{n}.png")
 def slide_image(deck_id: str, n: int, request: Request):
     deck = _load_or_404(deck_id)
-    path = store.slide_image_path(deck_id, n)
-    if not path.exists():
+    path = store.find_slide_image(deck_id, n)
+    if path is None:
         raise HTTPException(404, f"slide {n} has no image yet")
     rendered_at = ""
     for slide in deck["slides"]:
@@ -345,7 +349,8 @@ def slide_image(deck_id: str, n: int, request: Request):
     etag = f'"{rendered_at or int(path.stat().st_mtime)}"'
     if request.headers.get("if-none-match") == etag:
         return Response(status_code=304)
-    return Response(path.read_bytes(), media_type="image/png",
+    media = "image/jpeg" if path.suffix == ".jpg" else "image/png"
+    return Response(path.read_bytes(), media_type=media,
                     headers={"ETag": etag, "Cache-Control": "no-cache"})
 
 

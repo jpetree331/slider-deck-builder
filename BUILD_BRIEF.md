@@ -40,9 +40,11 @@ The twelve decisions from the Master Plan header (`lantern_master_plan.md`) appl
 
 ```
 data/decks/<deck_id>/
-  deck.json          # everything below
-  slides/01.png ...  # zero-padded, position == filename
-  exports/           # lantern-<slug>.pptx / .pdf / .zip, rebuilt on demand
+  deck.json            # everything below
+  slides/01.jpg ...    # zero-padded, position == filename; extension = the
+                       #   painter's honest format, jpg or png (2026-08-17 —
+                       #   PNG-wrapping painter JPEGs quintupled deck weight)
+  exports/             # lantern-<slug>.pptx / .pdf / .zip, rebuilt on demand
 ```
 
 ```jsonc

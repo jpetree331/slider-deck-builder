@@ -89,16 +89,18 @@ try:
     check("list carries cover for rendered deck", mine["cover"] == "slides/01.png")
 
     print("smoke_full: slide images")
-    r = client.get(f"/api/decks/{deck['id']}/slides/1.png")
-    check("PNG streams with content-type", r.status_code == 200
+    r = client.get(f"/api/decks/{deck['id']}/slides/1/image")
+    check("image streams with honest content-type", r.status_code == 200
           and r.headers["content-type"] == "image/png")
     etag = r.headers.get("etag", "")
     check("ETag keyed on rendered_at", "2026-01-01" in etag)
-    r304 = client.get(f"/api/decks/{deck['id']}/slides/1.png",
+    r304 = client.get(f"/api/decks/{deck['id']}/slides/1/image",
                       headers={"If-None-Match": etag})
     check("If-None-Match returns 304", r304.status_code == 304)
+    check("legacy {n}.png alias still serves",
+          client.get(f"/api/decks/{deck['id']}/slides/1.png").status_code == 200)
     check("missing slide image 404s",
-          client.get(f"/api/decks/{deck['id']}/slides/9.png").status_code == 404)
+          client.get(f"/api/decks/{deck['id']}/slides/9/image").status_code == 404)
 
     print("smoke_full: render queue over the wire")
     check("cancel on idle deck is clean",
@@ -125,8 +127,8 @@ try:
     copy = client.post(f"/api/decks/{deck['id']}/duplicate").json()
     copy_id = copy["id"]
     check("duplicate over the wire", copy["title"] == "Smoke Full (copy)")
-    check("copy's PNG serves",
-          client.get(f"/api/decks/{copy_id}/slides/1.png").status_code == 200)
+    check("copy's image serves",
+          client.get(f"/api/decks/{copy_id}/slides/1/image").status_code == 200)
     check("delete copy", client.delete(f"/api/decks/{copy_id}").status_code == 200)
     copy_id = None
 finally:

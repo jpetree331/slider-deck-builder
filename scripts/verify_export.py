@@ -78,6 +78,27 @@ time.sleep(0.02)
 export.export_deck(deck["id"], "pptx")
 check("second export rewrites the file", path.stat().st_mtime_ns > first_mtime)
 
+print("verify_export: mixed formats (slides store the painter's honest format)")
+jpg_path = store.slide_image_path(deck["id"], 2, "jpg")
+Image.new("RGB", (320, 180), COLORS[1]).save(jpg_path, "JPEG")
+store.slide_image_path(deck["id"], 2).unlink()
+
+
+def rekey_slide_2(d):
+    d["slides"][1]["render"]["image"] = "slides/02.jpg"
+
+
+store.update_deck(deck["id"], rekey_slide_2)
+zpath = export.export_deck(deck["id"], "zip")
+with zipfile.ZipFile(zpath) as zf:
+    names = sorted(zf.namelist())
+check("zip carries honest mixed names",
+      names == ["01.png", "02.jpg", "03.png", "deck.json"])
+check("pptx embeds a jpg slide fine",
+      len(Presentation(str(export.export_deck(deck["id"], "pptx"))).slides) == 3)
+check("pdf builds from mixed formats",
+      export.export_deck(deck["id"], "pdf").read_bytes()[:5] == b"%PDF-")
+
 print("verify_export: partial semantics")
 def clear_slide_2(d):
     d["slides"][1]["render"] = None

@@ -44,7 +44,7 @@ def export_deck(deck_id: str, fmt: str, allow_partial: bool = False) -> Path:
     deck = store.load_deck(deck_id)
     rendered = [s for s in deck["slides"]
                 if s["render"] and s["render"]["status"] == "done"
-                and store.slide_image_path(deck_id, s["n"]).exists()]
+                and store.find_slide_image(deck_id, s["n"]) is not None]
     missing = len(deck["slides"]) - len(rendered)
     if missing and not allow_partial:
         raise NotFullyRendered(
@@ -57,7 +57,7 @@ def export_deck(deck_id: str, fmt: str, allow_partial: bool = False) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
     out = out_dir / f"lantern-{_slug(deck['title'])}.{fmt}"
     tmp = out.with_name(out.name + ".tmp")
-    paths = [store.slide_image_path(deck_id, s["n"]) for s in rendered]  # slides[].n order
+    paths = [store.find_slide_image(deck_id, s["n"]) for s in rendered]  # slides[].n order
 
     if fmt == "pptx":
         prs = Presentation()
